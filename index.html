@@ -15,11 +15,12 @@
     </div>
 
     <script>
-        const emojis = ['😀', '🚀', '🌈', '🎉', '🔥', '💡', '🌟', '🎨', '🎵', '📚'];
-        
-        function getRandomEmoji() {
-            return emojis[Math.floor(Math.random() * emojis.length)];
-        }
+   
+        const buttonEmojis = ['👽', '🥚', '✨', '🌀'];
+
+document.querySelectorAll('.button').forEach((button, index) => {
+    button.textContent = buttonEmojis[index];
+});
 
         document.querySelectorAll('.button').forEach(button => {
             button.textContent = getRandomEmoji();
