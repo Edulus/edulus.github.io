@@ -4,45 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edward Kasimir - Launch Page</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f0f0f0;
-        }
-        .container {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-        }
-        .button {
-            width: 150px;
-            height: 150px;
-            font-size: 48px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background-color: #ffffff;
-            border: 2px solid #333;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        .button:hover {
-            transform: scale(1.05);
-        }
-    </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
-        <div class="button" id="button1"></div>
-        <div class="button" id="button2"></div>
-        <div class="button" id="button3"></div>
-        <div class="button" id="button4"></div>
+        <a href="https://codesandbox.io/s/your-project-id-1" class="button" id="button1"></a>
+        <a href="https://codesandbox.io/s/your-project-id-2" class="button" id="button2"></a>
+        <a href="https://codesandbox.io/s/your-project-id-3" class="button" id="button3"></a>
+        <a href="https://codesandbox.io/s/your-project-id-4" class="button" id="button4"></a>
     </div>
 
     <script>
@@ -54,9 +23,6 @@
 
         document.querySelectorAll('.button').forEach(button => {
             button.textContent = getRandomEmoji();
-            button.addEventListener('click', () => {
-                alert('You clicked ' + button.textContent);
-            });
         });
     </script>
 </body>
