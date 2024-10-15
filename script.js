@@ -26,9 +26,9 @@ function animateButton(button, emoji, url) {
 
     const animation = animatedEmoji.animate([
         { transform: 'translate(-50%, -50%) scale(1)', opacity: 1 },
-        { transform: 'translate(-50%, -50%) scale(5)', opacity: 0 }
+        { transform: 'translate(-50%, -50%) scale(6)', opacity: 0 }
     ], {
-        duration: 500,
+        duration: 250,
         easing: 'ease-in'
     });
 
