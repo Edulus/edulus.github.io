@@ -15,6 +15,10 @@ body {
     gap: 20px;
 }
 
+.button-wrapper {
+    position: relative;
+}
+
 .button {
     width: 150px;
     height: 150px;
@@ -29,9 +33,29 @@ body {
     transition: transform 0.2s;
     color: #ffffff;
     text-decoration: none;
+    position: relative;
+    z-index: 1;
 }
 
 .button:hover {
     transform: scale(1.05);
     background-color: #444444;
+}
+
+.button-wrapper::after {
+    content: '';
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    right: -10px;
+    bottom: -10px;
+    background: radial-gradient(circle, rgba(255,215,0,0.5) 0%, rgba(255,215,0,0) 70%);
+    border-radius: 20px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 0;
+}
+
+.button-wrapper:hover::after {
+    opacity: 1;
 }
