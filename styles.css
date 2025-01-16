@@ -1,3 +1,8 @@
+:root {
+  --dot-color: rgba(240, 60, 159, 0.904);
+  --secondary-color: rgba(8, 177, 243, 0.356);
+}
+
 body {
   font-family: "Montserrat", sans-serif;
   display: flex;
@@ -17,48 +22,85 @@ body {
   animation: pulseGlow 3s linear infinite;
 }
 
+/*
 @keyframes pulseGlow {
   0% {
-    background-image: radial-gradient(
-        rgba(182, 173, 52, 0.904) 0.5px,
-        transparent 1px
-      ),
-      radial-gradient(rgba(217, 240, 15, 0.05) 0.5px, transparent 10px);
+    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
+      radial-gradient(var(--secondary-color) 0.5px, transparent 5px);
+  }
+  20% {
+    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
+      radial-gradient(var(--secondary-color) 1px, transparent 6px);
+  }
+  40% {
+    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
+      radial-gradient(var(--secondary-color) 2px, transparent 9px);
+  }
+  60% {
+    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
+      radial-gradient(var(--secondary-color) 3px, transparent 8px);
+  }
+  80% {
+    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
+      radial-gradient(var(--secondary-color) 2px, transparent 6px);
+  }
+  100% {
+    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
+      radial-gradient(var(--secondary-color) 0.5px, transparent 5px);
+  }
+}
+*/
+
+@keyframes pulseGlow {
+  0% {
+    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 2px),
+      radial-gradient(var(--secondary-color) 0.5px, transparent 5px);
+  }
+  10% {
+    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1.5px),
+      radial-gradient(var(--secondary-color) 0.75px, transparent 5.5px);
   }
   20% {
     background-image: radial-gradient(
-        rgba(182, 173, 52, 0.904) 0.5px,
-        transparent 1px
+        var(--dot-color) 0.5px,
+        transparent 1.25px
       ),
-      radial-gradient(rgba(217, 240, 15, 0.06) 2px, transparent 12px);
+      radial-gradient(var(--secondary-color) 1px, transparent 6px);
+  }
+  30% {
+    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
+      radial-gradient(var(--secondary-color) 1.5px, transparent 7.5px);
   }
   40% {
-    background-image: radial-gradient(
-        rgba(182, 173, 52, 0.904) 0.5px,
-        transparent 1px
-      ),
-      radial-gradient(rgba(217, 240, 15, 0.07) 4px, transparent 14px);
+    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
+      radial-gradient(var(--secondary-color) 2px, transparent 8.5px);
+  }
+  50% {
+    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
+      radial-gradient(var(--secondary-color) 2.5px, transparent 10.5px);
   }
   60% {
-    background-image: radial-gradient(
-        rgba(182, 173, 52, 0.904) 0.5px,
-        transparent 1px
-      ),
-      radial-gradient(rgba(217, 240, 15, 0.07) 4px, transparent 14px);
+    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
+      radial-gradient(var(--secondary-color) 3px, transparent 8.5px);
+  }
+  70% {
+    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
+      radial-gradient(var(--secondary-color) 2.5px, transparent 7.5px);
   }
   80% {
     background-image: radial-gradient(
-        rgba(182, 173, 52, 0.904) 0.5px,
-        transparent 1px
+        var(--dot-color) 0.5px,
+        transparent 1.25px
       ),
-      radial-gradient(rgba(217, 240, 15, 0.06) 3px, transparent 12px);
+      radial-gradient(var(--secondary-color) 2px, transparent 6px);
+  }
+  90% {
+    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1.5px),
+      radial-gradient(var(--secondary-color) 1.25px, transparent 5.5px);
   }
   100% {
-    background-image: radial-gradient(
-        rgba(182, 173, 52, 0.904) 0.5px,
-        transparent 1px
-      ),
-      radial-gradient(rgba(217, 240, 15, 0.05) 2px, transparent 10px);
+    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 2px),
+      radial-gradient(var(--secondary-color) 0.5px, transparent 5px);
   }
 }
 
@@ -109,7 +151,7 @@ body {
   bottom: -10px;
   background: radial-gradient(
     circle,
-    rgba(255, 215, 0, 0.3) 0%,
+    rgba(0, 183, 255, 0.3) 0%,
     rgba(255, 215, 0, 0) 70%
   );
   border-radius: 20px;
