@@ -22,35 +22,6 @@ body {
   animation: pulseGlow 3s linear infinite;
 }
 
-/*
-@keyframes pulseGlow {
-  0% {
-    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
-      radial-gradient(var(--secondary-color) 0.5px, transparent 5px);
-  }
-  20% {
-    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
-      radial-gradient(var(--secondary-color) 1px, transparent 6px);
-  }
-  40% {
-    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
-      radial-gradient(var(--secondary-color) 2px, transparent 9px);
-  }
-  60% {
-    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
-      radial-gradient(var(--secondary-color) 3px, transparent 8px);
-  }
-  80% {
-    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
-      radial-gradient(var(--secondary-color) 2px, transparent 6px);
-  }
-  100% {
-    background-image: radial-gradient(var(--dot-color) 0.5px, transparent 1px),
-      radial-gradient(var(--secondary-color) 0.5px, transparent 5px);
-  }
-}
-*/
-
 @keyframes pulseGlow {
   0% {
     background-image: radial-gradient(var(--dot-color) 0.5px, transparent 2px),
@@ -111,17 +82,23 @@ body {
   width: 60vh;
   height: 60vh;
   position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  padding: 20px;
 }
 
 .button-wrapper {
-  position: absolute;
   display: flex;
   align-items: center;
+  justify-content: center;
+  width: 30%;
+  height: 30%;
+  box-sizing: border-box;
 }
 
 .button {
-  width: 120px;
-  height: 120px;
+  width: 125px;
+  height: 125px;
   font-size: 48px;
   display: flex;
   justify-content: center;
@@ -187,31 +164,39 @@ body {
 .button-wrapper:hover .tooltip {
   visibility: visible;
   opacity: 1;
-  transform: translateX(-50%) translateY(0px);
+  transform: translateX(-50%) translateY(10px);
 }
 
 /* Specific positioning for the pentagon */
 #button1Wrapper {
-  top: 5%;
-  left: 40%;
+  order: 1;
+  width: 100%;
 }
 
 #button2Wrapper {
-  top: 35%;
-  left: 15%;
+  order: 2;
+  margin-top: 0px;
+  width: 45%;
+  margin-right: 5%;
 }
 
 #button3Wrapper {
-  top: 35%;
-  left: 65%;
+  order: 3;
+  margin-top: 0px;
+  margin-left: 5%;
+  width: 45%;
 }
 
 #button4Wrapper {
-  top: 65%;
-  left: 25%;
+  order: 4;
+  width: 35%;
+  margin-left: 10%;
+  margin-top: 7px;
 }
 
 #button5Wrapper {
-  top: 65%;
-  left: 55%;
+  order: 5;
+  width: 35%;
+  margin-right: 10%;
+  margin-top: 7px;
 }
