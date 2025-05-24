@@ -111,7 +111,73 @@ body {
   color: #fff;
   text-decoration: none;
   position: relative;
-  z-index: 1;
+  z-index: 1; /* Original z-index, will be overridden by .button-enhanced-glow's z-index on hover */
+}
+
+.button-enhanced-glow {
+  /* Example: A stronger, more focused shadow. Adjust as needed. */
+  box-shadow: 0 0 20px 10px rgba(0, 183, 255, 0.7), /* Outer glow */
+              0 0 30px 20px rgba(0, 183, 255, 0.5), /* Softer, wider glow */
+              inset 0 0 10px rgba(255, 255, 255, 0.3); /* Optional inner highlight */
+  /* We can add a transition here if we want the glow to fade in/out */
+  transition: box-shadow 0.3s ease-in-out;
+  /* Ensure the button itself is visually above its own glow if using only box-shadow */
+  position: relative; 
+  z-index: 2; /* Make sure it's above the general mouse-glow */
+  overflow: visible; /* Allow sparks to go outside button bounds */
+}
+
+@keyframes spark-animation {
+  0% {
+    transform: scale(0.5) translate(0, 0);
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.2) translate(20px, -20px); /* Example: moves up and right */
+    opacity: 0;
+  }
+}
+
+@keyframes spark-animation-2 {
+  0% {
+    transform: scale(0.5) translate(0, 0);
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.2) translate(-30px, 10px); /* Example: moves down and left */
+    opacity: 0;
+  }
+}
+
+.button-enhanced-glow::before,
+.button-enhanced-glow::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px; /* Spark size */
+  height: 5px; /* Spark size */
+  background-color: #fff; /* Spark color - white or a bright color */
+  border-radius: 50%;
+  opacity: 0; /* Start hidden */
+  z-index: 3; /* Above the button's main glow but part of the button */
+  pointer-events: none; /* Should not interfere with mouse */
+}
+
+/* Apply animation when glow is active */
+.button-enhanced-glow::before {
+  animation: spark-animation 1s ease-out forwards; 
+}
+
+.button-enhanced-glow::after {
+  animation: spark-animation-2 0.8s ease-out forwards;
+  animation-delay: 0.2s; /* Stagger the sparks */
 }
 
 .button:hover {
@@ -136,10 +202,13 @@ body {
   transition: opacity 0.3s;
   z-index: 0;
 }
+*/
 
+/*
 .button-wrapper:hover::after {
   opacity: 1;
 }
+*/
 
 /* Tooltip Styles */
 .button-wrapper .tooltip {
@@ -192,6 +261,24 @@ body {
   width: 35%;
   margin-left: 10%;
   margin-top: 7px;
+}
+
+#mouse-glow {
+  position: fixed; /* Use fixed to position relative to viewport */
+  width: 150px; /* Adjust size as needed */
+  height: 150px; /* Adjust size as needed */
+  border-radius: 50%; /* Make it circular */
+  pointer-events: none; /* Ensure it doesn't interfere with mouse clicks on other elements */
+  z-index: 0; /* Ensure it's behind content but above the static background */
+  opacity: 0; /* Initially hidden */
+  transition: opacity 0.3s ease; /* Smooth fade-in */
+  background: radial-gradient(
+    circle,
+    rgba(0, 183, 255, 0.3) 0%, /* Center color from original .button-wrapper::after */
+    rgba(255, 215, 0, 0) 70%   /* Outer color (transparent) from original */
+  );
+  /* Adjust transform to center the glow on the cursor */
+  transform: translate(-50%, -50%);
 }
 
 #button5Wrapper {
