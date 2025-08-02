@@ -1,0 +1,91 @@
+/* layout.css */
+.container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 60vh;
+  height: 60vh;
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  padding: 20px;
+}
+
+.button-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30%;
+  height: 30%;
+  box-sizing: border-box;
+}
+
+.button {
+  width: 125px;
+  height: 125px;
+  font-size: 48px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #333;
+  border: 2px solid #fff;
+  border-radius: 10px;
+  cursor: pointer;
+  color: #fff;
+  text-decoration: none;
+  position: relative;
+  z-index: 1;
+}
+
+/* Pentagon positioning */
+#button1Wrapper {
+  order: 1;
+  width: 100%;
+}
+
+#button2Wrapper {
+  order: 2;
+  margin-top: 0px;
+  width: 45%;
+  margin-right: 5%;
+}
+
+#button3Wrapper {
+  order: 3;
+  margin-top: 0px;
+  margin-left: 5%;
+  width: 45%;
+}
+
+#button4Wrapper {
+  order: 4;
+  width: 35%;
+  margin-left: 10%;
+  margin-top: 7px;
+}
+
+#button5Wrapper {
+  order: 5;
+  width: 35%;
+  margin-right: 10%;
+  margin-top: 7px;
+}
+
+/* Tooltip positioning */
+.button-wrapper .tooltip {
+  visibility: hidden;
+  width: 180px;
+  background-color: #555;
+  color: #fff;
+  text-align: center;
+  font-family: "Montserrat", sans-serif;
+  font-size: 14px;
+  border-radius: 6px;
+  padding: 5px;
+  position: absolute;
+  z-index: 2;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%) translateY(15px);
+  opacity: 0;
+}
