@@ -32,8 +32,11 @@ class MusicalMesh {
     this.minVoiceIntervalMs = 30;
     this.lastVoiceTime = 0;
 
-    // Chromatic — 12 notes across the screen as requested
-    this.notesPerScreen = 12;
+    // Pentatonic major scale — adjacent dots can only form consonant intervals.
+    // Two pentatonic octaves span the screen (10 slots), so there is enough
+    // melodic range without cramming semitones next to each other.
+    this.pentatonic = [0, 2, 4, 7, 9]; // semitone offsets: R, M2, M3, P5, M6
+    this.notesPerScreen = this.pentatonic.length * 2; // 10 slots = 2 octaves
 
     // Click-driven transposition: shifts the whole mesh up or down
     this.keyOffset = 0; // 0..11 semitones (X of click)
@@ -127,9 +130,12 @@ class MusicalMesh {
     const xRatio = Math.max(0, Math.min(0.999, x / w));
     const yRatio = Math.max(0, Math.min(0.999, y / h));
     const noteIdx = Math.floor(xRatio * this.notesPerScreen);
+    // Map the slot to a pentatonic semitone, spanning multiple octaves left→right.
+    const pLen = this.pentatonic.length;
+    const semitone = this.pentatonic[noteIdx % pLen] + Math.floor(noteIdx / pLen) * 12;
     const octave = 6 - Math.floor(yRatio * 5);
     const midi =
-      12 * (octave + 1) + noteIdx + this.keyOffset + this.octaveOffset * 12;
+      12 * (octave + 1) + semitone + this.keyOffset + this.octaveOffset * 12;
     return 440 * Math.pow(2, (midi - 69) / 12);
   }
 
