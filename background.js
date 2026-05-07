@@ -4,7 +4,8 @@
 // Both layers pulse together (3s breath cycle) and brighten near the cursor.
 
 class BackgroundField {
-  constructor() {
+  constructor(opts = {}) {
+    this.musicalMesh = opts.musicalMesh || null;
     this.canvas = document.createElement("canvas");
     this.canvas.id = "bg-canvas";
     Object.assign(this.canvas.style, {
@@ -127,6 +128,11 @@ class BackgroundField {
     // Update excitement for both layers
     this.exciteDots(this.pinkDots, mx, my, rSq, r);
     this.exciteDots(this.cyanDots, mx, my, rSq, r);
+
+    // Feed excitement updates to the musical mesh — cyan dots are the "keys"
+    if (this.musicalMesh) {
+      this.musicalMesh.update(this.cyanDots, w, h);
+    }
 
     // --- Cyan halo layer (drawn first, behind) — this layer carries the mouse reaction ---
     const sprite = this.haloSprite;

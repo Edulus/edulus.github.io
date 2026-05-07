@@ -53,14 +53,20 @@
         <div class="tooltip">Camp Location Chooser</div>
       </div>
     </div>
+    <script src="mesh-audio.js"></script>
     <script src="background.js"></script>
     <script src="layout.js"></script>
     <script src="animation.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", () => {
-        const background = new BackgroundField();
+        const musicalMesh = new MusicalMesh();
+        const background = new BackgroundField({ musicalMesh });
         const layout = new Layout();
         const animation = new Animation(layout);
+
+        // Browsers require a user gesture before AudioContext can start.
+        // Any click anywhere — including on a project button — starts/resumes audio.
+        document.addEventListener("click", () => musicalMesh.start());
       });
     </script>
   </body>
