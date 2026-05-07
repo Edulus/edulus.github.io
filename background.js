@@ -51,6 +51,20 @@ class BackgroundField {
       }
     });
 
+    // Mirror touch position to the same mouse slot so the dot field and
+    // musical mesh react to finger movement exactly like mouse hover.
+    window.addEventListener("touchmove", (e) => {
+      const t = e.touches[0];
+      if (t) {
+        this.mouse.x = t.clientX;
+        this.mouse.y = t.clientY;
+      }
+    }, { passive: true });
+    window.addEventListener("touchend", () => {
+      this.mouse.x = -9999;
+      this.mouse.y = -9999;
+    }, { passive: true });
+
     this.animate = this.animate.bind(this);
     requestAnimationFrame(this.animate);
   }

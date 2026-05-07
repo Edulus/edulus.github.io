@@ -66,6 +66,12 @@
         const instrumentSelector = new InstrumentSelector(musicalMesh);
 
         // Browsers require a user gesture before AudioContext can start.
+        // Start audio eagerly on first touch (no 300ms click delay on mobile).
+        document.addEventListener("touchstart", () => musicalMesh.start(), {
+          once: true,
+          passive: true,
+        });
+
         // Any click anywhere — including on a project button — starts/resumes audio.
         document.addEventListener("click", (e) => {
           musicalMesh.start();
