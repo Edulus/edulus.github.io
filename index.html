@@ -66,7 +66,17 @@
 
         // Browsers require a user gesture before AudioContext can start.
         // Any click anywhere — including on a project button — starts/resumes audio.
-        document.addEventListener("click", () => musicalMesh.start());
+        document.addEventListener("click", (e) => {
+          musicalMesh.start();
+          // Project-button clicks should navigate, not retune the mesh.
+          if (e.target.closest(".button")) return;
+          // Grid click → set new key/octave and play a chord at that location
+          const w = window.innerWidth;
+          const h = window.innerHeight;
+          musicalMesh.setAnchor(e.clientX, e.clientY, w, h);
+          background.flashAt(e.clientX, e.clientY);
+          musicalMesh.retriggerAt(background.cyanDots, e.clientX, e.clientY, w, h);
+        });
       });
     </script>
   </body>

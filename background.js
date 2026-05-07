@@ -95,6 +95,38 @@ class BackgroundField {
     return dots;
   }
 
+  // Boost excitement for dots within a larger radius — used as visual
+  // feedback when the user clicks to change the mesh's key.
+  // Pink dots get an amplified boost since their render dampens excitement by 0.15.
+  flashAt(x, y, radius = 240) {
+    const rSq = radius * radius;
+
+    // Cyan layer — standard intensity (already prominent in render)
+    for (let i = 0; i < this.cyanDots.length; i++) {
+      const d = this.cyanDots[i];
+      const dx = d.x - x;
+      const dy = d.y - y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < rSq) {
+        const intensity = 1 - Math.sqrt(distSq) / radius;
+        if (intensity > d.excitement) d.excitement = intensity;
+      }
+    }
+
+    // Pink layer — amplified intensity to overcome the 0.15 damping in render
+    const pinkBoost = 6;
+    for (let i = 0; i < this.pinkDots.length; i++) {
+      const d = this.pinkDots[i];
+      const dx = d.x - x;
+      const dy = d.y - y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < rSq) {
+        const intensity = (1 - Math.sqrt(distSq) / radius) * pinkBoost;
+        if (intensity > d.excitement) d.excitement = intensity;
+      }
+    }
+  }
+
   exciteDots(dots, mx, my, rSq, r) {
     for (let i = 0; i < dots.length; i++) {
       const d = dots[i];

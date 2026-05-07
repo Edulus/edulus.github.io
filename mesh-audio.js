@@ -26,6 +26,10 @@ class MusicalMesh {
     // Chromatic — 12 notes across the screen as requested
     this.notesPerScreen = 12;
 
+    // Click-driven transposition: shifts the whole mesh up or down
+    this.keyOffset = 0;     // 0..11 semitones (X of click)
+    this.octaveOffset = 0;  // -1..+1 octaves (Y of click)
+
     this.hint = null;
     this.showHint();
   }
@@ -101,8 +105,78 @@ class MusicalMesh {
     const octave = 6 - Math.floor(yRatio * 5);
 
     // MIDI: C0 = 12, so C{octave} = 12*(octave+1)
-    const midi = 12 * (octave + 1) + noteIdx;
+    // Add the click-driven transposition offsets
+    const midi =
+      12 * (octave + 1) + noteIdx + this.keyOffset + this.octaveOffset * 12;
     return 440 * Math.pow(2, (midi - 69) / 12);
+  }
+
+  // Set the mesh's key+octave from a click location.
+  setAnchor(x, y, w, h) {
+    const xRatio = Math.max(0, Math.min(0.999, x / w));
+    const yRatio = Math.max(0, Math.min(0.999, y / h));
+    // X: 12 keys across the screen — left=C, right=B
+    this.keyOffset = Math.floor(xRatio * 12);
+    // Y: top = +1 octave, middle = 0, bottom = -1 octave
+    this.octaveOffset = 1 - Math.floor(yRatio * 3);
+  }
+
+  // Force-play a chord at a position, ignoring per-dot cooldown so a click
+  // always produces audible feedback at the new key.
+  retriggerAt(dots, cx, cy, w, h, radius = 220) {
+    if (!this.enabled || !this.audioCtx) return;
+    const rSq = radius * radius;
+    let stagger = 0;
+    for (let i = 0; i < dots.length; i++) {
+      const dot = dots[i];
+      const dx = dot.x - cx;
+      const dy = dot.y - cy;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < rSq) {
+        const intensity = 1 - Math.sqrt(distSq) / radius;
+        const freq = this.noteForPosition(dot.x, dot.y, w, h);
+        // Slight 8ms stagger so notes arpeggiate rather than slam
+        this.pingAt(dot, freq, intensity, stagger * 0.008);
+        stagger++;
+        // Reset rising-edge tracking so subsequent hover triggers work cleanly
+        this.previousExcitement.set(dot, 0);
+      }
+    }
+  }
+
+  // Like ping(), but with explicit intensity and time delay, and no cooldown.
+  pingAt(dot, freq, intensity, delay) {
+    if (!this.enabled || !this.audioCtx) return;
+    this.cooldowns.set(dot, performance.now());
+
+    const t = this.audioCtx.currentTime + delay;
+    const peak = 0.5 * intensity;
+
+    const osc = this.audioCtx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+
+    const overtone = this.audioCtx.createOscillator();
+    overtone.type = "sine";
+    overtone.frequency.value = freq * 2;
+
+    const overtoneGain = this.audioCtx.createGain();
+    overtoneGain.gain.value = 0.15;
+
+    const env = this.audioCtx.createGain();
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(peak, t + 0.015);
+    env.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
+
+    osc.connect(env);
+    overtone.connect(overtoneGain);
+    overtoneGain.connect(env);
+    env.connect(this.master);
+
+    osc.start(t);
+    overtone.start(t);
+    osc.stop(t + 1.6);
+    overtone.stop(t + 1.6);
   }
 
   ping(dot, freq) {
