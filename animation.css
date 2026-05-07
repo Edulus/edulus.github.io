@@ -1,5 +1,12 @@
 /* animation.css */
 
+/* Prevent overscroll/bounce and edge-swipe on mobile so the full viewport
+   stays available for touch-to-music interaction. */
+html {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   font-family: "Montserrat", sans-serif;
   display: flex;
@@ -10,6 +17,8 @@ body {
   background-color: #222;
   color: #fff;
   overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: pan-x pan-y;
 }
 
 .button {

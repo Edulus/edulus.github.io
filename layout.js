@@ -18,8 +18,13 @@ class Layout {
   scaleContainer() {
     const el = document.querySelector(".container");
     if (!el) return;
-    // Leave 16px horizontal padding and 70px vertical for the instrument bar.
-    const available = Math.min(window.innerWidth - 16, window.innerHeight - 70);
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    // On phones, cap the hex at 72% of viewport width so there's open canvas
+    // above/below/around it for touch-to-music interaction.
+    // On wider screens, just subtract 16px of edge padding.
+    const maxWidth = vw < 600 ? vw * 0.72 : vw - 16;
+    const available = Math.min(maxWidth, vh - 70);
     const scale = Math.min(1, available / 500);
     el.style.zoom = scale;
   }
