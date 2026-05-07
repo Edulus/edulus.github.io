@@ -1,0 +1,170 @@
+// background.js — interactive dot field with two layers:
+//   - small sharp pink/magenta dots on a tight grid
+//   - soft cyan halos on a wider, offset grid (pre-rendered as a radial gradient sprite)
+// Both layers pulse together (3s breath cycle) and brighten near the cursor.
+
+class BackgroundField {
+  constructor() {
+    this.canvas = document.createElement("canvas");
+    this.canvas.id = "bg-canvas";
+    Object.assign(this.canvas.style, {
+      position: "fixed",
+      top: "0",
+      left: "0",
+      width: "100%",
+      height: "100%",
+      zIndex: "-1",
+      pointerEvents: "none",
+    });
+    document.body.prepend(this.canvas);
+    this.ctx = this.canvas.getContext("2d");
+
+    this.mouse = { x: -9999, y: -9999 };
+    this.startTime = performance.now();
+
+    // Layer geometry
+    this.pinkSpacing = 17;
+    this.cyanSpacing = 34;
+    this.influenceRadius = 140;
+
+    // Colors lifted from the original CSS palette
+    this.pinkColor = [240, 60, 159];
+    this.cyanColor = [8, 177, 243];
+
+    // Pre-render the cyan halo as a sprite so each dot is a true soft gradient,
+    // not a flat-alpha arc. drawImage of a sprite is also faster than per-dot gradient.
+    this.haloSprite = this.buildHaloSprite();
+    this.haloSpriteRadius = this.haloSprite.width / 2;
+
+    this.resize();
+
+    window.addEventListener("resize", () => this.resize());
+    window.addEventListener("mousemove", (e) => {
+      this.mouse.x = e.clientX;
+      this.mouse.y = e.clientY;
+    });
+    window.addEventListener("mouseout", (e) => {
+      if (!e.relatedTarget) {
+        this.mouse.x = -9999;
+        this.mouse.y = -9999;
+      }
+    });
+
+    this.animate = this.animate.bind(this);
+    requestAnimationFrame(this.animate);
+  }
+
+  buildHaloSprite() {
+    const r = 16;
+    const size = r * 2;
+    const c = document.createElement("canvas");
+    c.width = c.height = size;
+    const cctx = c.getContext("2d");
+    const [cr, cg, cb] = this.cyanColor;
+    const grad = cctx.createRadialGradient(r, r, 0, r, r, r);
+    grad.addColorStop(0, `rgba(${cr},${cg},${cb},0.65)`);
+    grad.addColorStop(0.35, `rgba(${cr},${cg},${cb},0.25)`);
+    grad.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
+    cctx.fillStyle = grad;
+    cctx.fillRect(0, 0, size, size);
+    return c;
+  }
+
+  resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    this.canvas.width = w * dpr;
+    this.canvas.height = h * dpr;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    this.pinkDots = this.makeGrid(w, h, this.pinkSpacing, 0);
+    // Cyan layer offset diagonally by half its spacing so the two grids interleave
+    this.cyanDots = this.makeGrid(w, h, this.cyanSpacing, this.cyanSpacing / 2);
+  }
+
+  makeGrid(w, h, spacing, offset) {
+    const dots = [];
+    const start = spacing / 2 + offset;
+    for (let x = start; x < w + spacing; x += spacing) {
+      for (let y = start; y < h + spacing; y += spacing) {
+        dots.push({ x, y, excitement: 0 });
+      }
+    }
+    return dots;
+  }
+
+  exciteDots(dots, mx, my, rSq, r) {
+    for (let i = 0; i < dots.length; i++) {
+      const d = dots[i];
+      const dx = d.x - mx;
+      const dy = d.y - my;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < rSq) {
+        const intensity = 1 - Math.sqrt(distSq) / r;
+        const eased = intensity * intensity;
+        if (eased > d.excitement) d.excitement = eased;
+      }
+      d.excitement *= 0.93;
+    }
+  }
+
+  animate() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, w, h);
+
+    const mx = this.mouse.x;
+    const my = this.mouse.y;
+    const r = this.influenceRadius;
+    const rSq = r * r;
+
+    // 3-second breath cycle, value in [0, 1]
+    const t = (performance.now() - this.startTime) / 1000;
+    const breathe = (Math.sin(t * 2.094) + 1) / 2;
+
+    // Update excitement for both layers
+    this.exciteDots(this.pinkDots, mx, my, rSq, r);
+    this.exciteDots(this.cyanDots, mx, my, rSq, r);
+
+    // --- Cyan halo layer (drawn first, behind) — this layer carries the mouse reaction ---
+    const sprite = this.haloSprite;
+    const sr = this.haloSpriteRadius;
+    for (let i = 0; i < this.cyanDots.length; i++) {
+      const d = this.cyanDots[i];
+      const e = d.excitement;
+      // Big growth on excitement: ~6 at rest → ~30 at full excitement
+      const haloR = 6 + breathe * 2 + e * 24;
+      const scale = haloR / sr;
+      const drawSize = sr * 2 * scale;
+      // Strong opacity boost when excited so the blue really pops
+      ctx.globalAlpha = Math.min(1, 0.7 + e * 1.2);
+      ctx.drawImage(
+        sprite,
+        d.x - drawSize / 2,
+        d.y - drawSize / 2,
+        drawSize,
+        drawSize
+      );
+    }
+    ctx.globalAlpha = 1;
+
+    // --- Pink dot layer (drawn on top) — stays subtle, just the breathing pulse ---
+    const [cr1, cg1, cb1] = this.pinkColor;
+    for (let i = 0; i < this.pinkDots.length; i++) {
+      const d = this.pinkDots[i];
+      // Minimal mouse reaction — let the blue do the work
+      const e = d.excitement * 0.15;
+      const size = 0.5 + breathe * 0.3 + e * 1.5;
+      const alpha = 0.4 + breathe * 0.15 + e * 0.15;
+
+      ctx.fillStyle = `rgba(${cr1},${cg1},${cb1},${alpha})`;
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    requestAnimationFrame(this.animate);
+  }
+}

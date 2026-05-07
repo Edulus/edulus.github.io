@@ -53,10 +53,12 @@
         <div class="tooltip">Camp Location Chooser</div>
       </div>
     </div>
+    <script src="background.js"></script>
     <script src="layout.js"></script>
     <script src="animation.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", () => {
+        const background = new BackgroundField();
         const layout = new Layout();
         const animation = new Animation(layout);
       });
