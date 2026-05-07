@@ -2,8 +2,12 @@
 // Each dot maps to a pitch:
 //   X position → chromatic note (12 across the screen)
 //   Y position → octave (top = high, bottom = low)
-// When a dot crosses the excitement threshold, a soft sine envelope rings out.
-// Multiple simultaneous pings = chord.
+// When a dot crosses the excitement threshold, the active instrument's voice
+// envelope rings out. Multiple simultaneous pings = chord.
+//
+// A click on the grid retunes the mesh (X = key, Y = octave shift).
+// A click on one of the 7 invisible slots along the bottom edge changes
+// the active instrument timbre (clarinet, bass, piano, harpsichord, …).
 //
 // Browsers block AudioContext until a user gesture, so a small hint badge
 // invites the user to click. After the first click, audio is live.
@@ -21,14 +25,31 @@ class MusicalMesh {
 
     this.cooldownMs = 220;
     this.excitementThreshold = 0.35;
-    this.masterVolume = 0.14;
+    this.masterVolume = 0.10;
+
+    // Global rate limit across all voices to prevent the audio graph from
+    // ballooning when the cursor sweeps fast. ~33 new voices/sec maximum.
+    this.minVoiceIntervalMs = 30;
+    this.lastVoiceTime = 0;
 
     // Chromatic — 12 notes across the screen as requested
     this.notesPerScreen = 12;
 
     // Click-driven transposition: shifts the whole mesh up or down
-    this.keyOffset = 0;     // 0..11 semitones (X of click)
-    this.octaveOffset = 0;  // -1..+1 octaves (Y of click)
+    this.keyOffset = 0; // 0..11 semitones (X of click)
+    this.octaveOffset = 0; // -1..+1 octaves (Y of click)
+
+    // Instrument voices — each is { name, voice(freq, intensity, time) }
+    this.instruments = [
+      { name: "Clarinet", voice: this.voiceClarinet },
+      { name: "Bass Guitar", voice: this.voiceBass },
+      { name: "Piano", voice: this.voicePiano },
+      { name: "Harpsichord", voice: this.voiceHarpsichord },
+      { name: "Bell", voice: this.voiceBell },
+      { name: "Pad", voice: this.voicePad },
+      { name: "Pluck", voice: this.voicePluck },
+    ];
+    this.currentInstrument = 0;
 
     this.hint = null;
     this.showHint();
@@ -40,7 +61,7 @@ class MusicalMesh {
     hint.textContent = "🔊 click anywhere to enable sound";
     Object.assign(hint.style, {
       position: "fixed",
-      bottom: "20px",
+      bottom: "80px",
       right: "20px",
       padding: "8px 14px",
       background: "rgba(0,0,0,0.55)",
@@ -78,13 +99,21 @@ class MusicalMesh {
       this.master = this.audioCtx.createGain();
       this.master.gain.value = this.masterVolume;
 
-      // Gentle lowpass to soften the high octaves
+      // Compressor squashes peaks so simultaneous voices don't clip
+      this.compressor = this.audioCtx.createDynamicsCompressor();
+      this.compressor.threshold.value = -18;
+      this.compressor.knee.value = 12;
+      this.compressor.ratio.value = 8;
+      this.compressor.attack.value = 0.005;
+      this.compressor.release.value = 0.1;
+
       this.filter = this.audioCtx.createBiquadFilter();
       this.filter.type = "lowpass";
       this.filter.frequency.value = 5000;
       this.filter.Q.value = 0.7;
 
-      this.master.connect(this.filter);
+      this.master.connect(this.compressor);
+      this.compressor.connect(this.filter);
       this.filter.connect(this.audioCtx.destination);
 
       this.enabled = true;
@@ -97,32 +126,236 @@ class MusicalMesh {
   noteForPosition(x, y, w, h) {
     const xRatio = Math.max(0, Math.min(0.999, x / w));
     const yRatio = Math.max(0, Math.min(0.999, y / h));
-
-    // 12 chromatic notes across width — left=C, right=B
     const noteIdx = Math.floor(xRatio * this.notesPerScreen);
-
-    // Y: top = octave 6 (high), bottom = octave 2 (low) — 5 octaves of range
     const octave = 6 - Math.floor(yRatio * 5);
-
-    // MIDI: C0 = 12, so C{octave} = 12*(octave+1)
-    // Add the click-driven transposition offsets
     const midi =
       12 * (octave + 1) + noteIdx + this.keyOffset + this.octaveOffset * 12;
     return 440 * Math.pow(2, (midi - 69) / 12);
   }
 
-  // Set the mesh's key+octave from a click location.
   setAnchor(x, y, w, h) {
     const xRatio = Math.max(0, Math.min(0.999, x / w));
     const yRatio = Math.max(0, Math.min(0.999, y / h));
-    // X: 12 keys across the screen — left=C, right=B
     this.keyOffset = Math.floor(xRatio * 12);
-    // Y: top = +1 octave, middle = 0, bottom = -1 octave
     this.octaveOffset = 1 - Math.floor(yRatio * 3);
   }
 
-  // Force-play a chord at a position, ignoring per-dot cooldown so a click
-  // always produces audible feedback at the new key.
+  setInstrument(idx) {
+    const max = this.instruments.length - 1;
+    this.currentInstrument = Math.max(0, Math.min(max, idx));
+    // Demo note (middle C) so the user immediately hears the new timbre
+    if (this.enabled && this.audioCtx) {
+      this.playVoice(261.63, 0.65, this.audioCtx.currentTime);
+    }
+  }
+
+  // Dispatch to the active instrument's voice synthesis.
+  // Returns false if the voice was rate-limited (caller can skip cooldown updates).
+  playVoice(freq, intensity, time) {
+    const nowMs = performance.now();
+    if (nowMs - this.lastVoiceTime < this.minVoiceIntervalMs) return false;
+    this.lastVoiceTime = nowMs;
+    const inst = this.instruments[this.currentInstrument];
+    inst.voice.call(this, freq, intensity, time);
+    return true;
+  }
+
+  // ============ INSTRUMENT VOICES ============
+  // Each takes (freq, intensity, time) and creates oscillator(s) + envelope.
+
+  // Clarinet: hollow tone from odd-harmonic-dominant additive synthesis
+  voiceClarinet(freq, intensity, time) {
+    const harmonics = [
+      { mult: 1, gain: 0.6 },
+      { mult: 3, gain: 0.3 },
+      { mult: 5, gain: 0.15 },
+      { mult: 7, gain: 0.07 },
+    ];
+    const env = this.audioCtx.createGain();
+    env.gain.setValueAtTime(0, time);
+    env.gain.linearRampToValueAtTime(0.4 * intensity, time + 0.06);
+    env.gain.linearRampToValueAtTime(0.32 * intensity, time + 0.4);
+    env.gain.exponentialRampToValueAtTime(0.001, time + 1.4);
+    env.connect(this.master);
+
+    for (const h of harmonics) {
+      const osc = this.audioCtx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq * h.mult;
+      const g = this.audioCtx.createGain();
+      g.gain.value = h.gain;
+      osc.connect(g);
+      g.connect(env);
+      osc.start(time);
+      osc.stop(time + 1.5);
+    }
+  }
+
+  // Bass Guitar: sawtooth dropped 2 octaves with a plucky filter envelope
+  voiceBass(freq, intensity, time) {
+    const f = freq / 4;
+    const osc = this.audioCtx.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.value = f;
+
+    const filter = this.audioCtx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.Q.value = 6;
+    filter.frequency.setValueAtTime(2200, time);
+    filter.frequency.exponentialRampToValueAtTime(400, time + 0.35);
+
+    const env = this.audioCtx.createGain();
+    env.gain.setValueAtTime(0, time);
+    env.gain.linearRampToValueAtTime(0.55 * intensity, time + 0.005);
+    env.gain.exponentialRampToValueAtTime(0.001, time + 1.0);
+
+    osc.connect(filter);
+    filter.connect(env);
+    env.connect(this.master);
+    osc.start(time);
+    osc.stop(time + 1.1);
+  }
+
+  // Piano: integer harmonics with hard attack and slow exponential decay
+  voicePiano(freq, intensity, time) {
+    const harmonics = [
+      { mult: 1, gain: 0.7 },
+      { mult: 2, gain: 0.32 },
+      { mult: 3, gain: 0.16 },
+      { mult: 4, gain: 0.08 },
+      { mult: 5, gain: 0.04 },
+    ];
+    const env = this.audioCtx.createGain();
+    env.gain.setValueAtTime(0, time);
+    env.gain.linearRampToValueAtTime(0.32 * intensity, time + 0.005);
+    env.gain.exponentialRampToValueAtTime(0.001, time + 2.0);
+    env.connect(this.master);
+
+    for (const h of harmonics) {
+      const osc = this.audioCtx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq * h.mult;
+      const g = this.audioCtx.createGain();
+      g.gain.value = h.gain;
+      osc.connect(g);
+      g.connect(env);
+      osc.start(time);
+      osc.stop(time + 2.1);
+    }
+  }
+
+  // Harpsichord: sawtooth + highpass, extremely plucky envelope
+  voiceHarpsichord(freq, intensity, time) {
+    const osc = this.audioCtx.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.value = freq;
+
+    const filter = this.audioCtx.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.value = freq * 1.5;
+
+    const env = this.audioCtx.createGain();
+    env.gain.setValueAtTime(0, time);
+    env.gain.linearRampToValueAtTime(0.35 * intensity, time + 0.002);
+    env.gain.exponentialRampToValueAtTime(0.001, time + 0.7);
+
+    osc.connect(filter);
+    filter.connect(env);
+    env.connect(this.master);
+    osc.start(time);
+    osc.stop(time + 0.8);
+  }
+
+  // Bell: inharmonic sine partials (ratios from real bell physics) with long decay
+  voiceBell(freq, intensity, time) {
+    const harmonics = [
+      { mult: 1, gain: 0.5 },
+      { mult: 2.0, gain: 0.25 },
+      { mult: 2.76, gain: 0.3 },
+      { mult: 5.4, gain: 0.15 },
+    ];
+    const env = this.audioCtx.createGain();
+    env.gain.setValueAtTime(0, time);
+    env.gain.linearRampToValueAtTime(0.30 * intensity, time + 0.005);
+    env.gain.exponentialRampToValueAtTime(0.001, time + 3.0);
+    env.connect(this.master);
+
+    for (const h of harmonics) {
+      const osc = this.audioCtx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq * h.mult;
+      const g = this.audioCtx.createGain();
+      g.gain.value = h.gain;
+      osc.connect(g);
+      g.connect(env);
+      osc.start(time);
+      osc.stop(time + 3.1);
+    }
+  }
+
+  // Pad: 3 detuned sawtooths through lowpass — slow attack, long sustain
+  voicePad(freq, intensity, time) {
+    const detunes = [-9, 0, 9]; // cents
+    const filter = this.audioCtx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 1400;
+
+    const env = this.audioCtx.createGain();
+    env.gain.setValueAtTime(0, time);
+    env.gain.linearRampToValueAtTime(0.18 * intensity, time + 0.35);
+    env.gain.exponentialRampToValueAtTime(0.001, time + 2.5);
+
+    filter.connect(env);
+    env.connect(this.master);
+
+    for (const d of detunes) {
+      const osc = this.audioCtx.createOscillator();
+      osc.type = "sawtooth";
+      osc.frequency.value = freq;
+      osc.detune.value = d;
+      osc.connect(filter);
+      osc.start(time);
+      osc.stop(time + 2.6);
+    }
+  }
+
+  // Pluck: triangle wave with very fast attack, quick release
+  voicePluck(freq, intensity, time) {
+    const osc = this.audioCtx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.value = freq;
+
+    const env = this.audioCtx.createGain();
+    env.gain.setValueAtTime(0, time);
+    env.gain.linearRampToValueAtTime(0.55 * intensity, time + 0.003);
+    env.gain.exponentialRampToValueAtTime(0.001, time + 0.55);
+
+    osc.connect(env);
+    env.connect(this.master);
+    osc.start(time);
+    osc.stop(time + 0.65);
+  }
+
+  // ============ TRIGGERS ============
+
+  // Hover-driven ping with cooldown
+  ping(dot, freq) {
+    if (!this.enabled || !this.audioCtx) return;
+    const nowMs = performance.now();
+    const last = this.cooldowns.get(dot) || 0;
+    if (nowMs - last < this.cooldownMs) return;
+    this.cooldowns.set(dot, nowMs);
+    this.playVoice(freq, 1.0, this.audioCtx.currentTime);
+  }
+
+  // Click-driven force-ping with explicit intensity and time delay (no cooldown)
+  pingAt(dot, freq, intensity, delay) {
+    if (!this.enabled || !this.audioCtx) return;
+    this.cooldowns.set(dot, performance.now());
+    this.playVoice(freq, intensity, this.audioCtx.currentTime + delay);
+  }
+
+  // Force-play a chord at a position (used on key-change clicks)
   retriggerAt(dots, cx, cy, w, h, radius = 220) {
     if (!this.enabled || !this.audioCtx) return;
     const rSq = radius * radius;
@@ -135,86 +368,11 @@ class MusicalMesh {
       if (distSq < rSq) {
         const intensity = 1 - Math.sqrt(distSq) / radius;
         const freq = this.noteForPosition(dot.x, dot.y, w, h);
-        // Slight 8ms stagger so notes arpeggiate rather than slam
         this.pingAt(dot, freq, intensity, stagger * 0.008);
         stagger++;
-        // Reset rising-edge tracking so subsequent hover triggers work cleanly
         this.previousExcitement.set(dot, 0);
       }
     }
-  }
-
-  // Like ping(), but with explicit intensity and time delay, and no cooldown.
-  pingAt(dot, freq, intensity, delay) {
-    if (!this.enabled || !this.audioCtx) return;
-    this.cooldowns.set(dot, performance.now());
-
-    const t = this.audioCtx.currentTime + delay;
-    const peak = 0.5 * intensity;
-
-    const osc = this.audioCtx.createOscillator();
-    osc.type = "sine";
-    osc.frequency.value = freq;
-
-    const overtone = this.audioCtx.createOscillator();
-    overtone.type = "sine";
-    overtone.frequency.value = freq * 2;
-
-    const overtoneGain = this.audioCtx.createGain();
-    overtoneGain.gain.value = 0.15;
-
-    const env = this.audioCtx.createGain();
-    env.gain.setValueAtTime(0, t);
-    env.gain.linearRampToValueAtTime(peak, t + 0.015);
-    env.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
-
-    osc.connect(env);
-    overtone.connect(overtoneGain);
-    overtoneGain.connect(env);
-    env.connect(this.master);
-
-    osc.start(t);
-    overtone.start(t);
-    osc.stop(t + 1.6);
-    overtone.stop(t + 1.6);
-  }
-
-  ping(dot, freq) {
-    if (!this.enabled || !this.audioCtx) return;
-
-    const nowMs = performance.now();
-    const last = this.cooldowns.get(dot) || 0;
-    if (nowMs - last < this.cooldownMs) return;
-    this.cooldowns.set(dot, nowMs);
-
-    const t = this.audioCtx.currentTime;
-
-    const osc = this.audioCtx.createOscillator();
-    osc.type = "sine";
-    osc.frequency.value = freq;
-
-    // Slight detuned overtone for a richer, music-box-like timbre
-    const overtone = this.audioCtx.createOscillator();
-    overtone.type = "sine";
-    overtone.frequency.value = freq * 2;
-
-    const overtoneGain = this.audioCtx.createGain();
-    overtoneGain.gain.value = 0.15;
-
-    const env = this.audioCtx.createGain();
-    env.gain.setValueAtTime(0, t);
-    env.gain.linearRampToValueAtTime(0.5, t + 0.015);
-    env.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
-
-    osc.connect(env);
-    overtone.connect(overtoneGain);
-    overtoneGain.connect(env);
-    env.connect(this.master);
-
-    osc.start(t);
-    overtone.start(t);
-    osc.stop(t + 1.6);
-    overtone.stop(t + 1.6);
   }
 
   update(dots, w, h) {
@@ -224,12 +382,115 @@ class MusicalMesh {
       const dot = dots[i];
       const prev = this.previousExcitement.get(dot) || 0;
       const curr = dot.excitement;
-      // Trigger only on the rising edge — dot crossed the threshold going up
       if (prev < threshold && curr >= threshold) {
         const freq = this.noteForPosition(dot.x, dot.y, w, h);
         this.ping(dot, freq);
       }
       this.previousExcitement.set(dot, curr);
     }
+  }
+}
+
+// Invisible row of 7 click zones along the bottom edge.
+// Each zone selects an instrument timbre on the mesh.
+class InstrumentSelector {
+  constructor(mesh) {
+    this.mesh = mesh;
+    this.slots = [];
+    this.activeIndex = 0;
+    this.labelEl = null;
+    this.labelTimer = null;
+    this.build();
+    // Highlight the default starting instrument
+    this.markActive(0);
+  }
+
+  build() {
+    const bar = document.createElement("div");
+    Object.assign(bar.style, {
+      position: "fixed",
+      bottom: "0",
+      left: "0",
+      right: "0",
+      height: "60px",
+      display: "flex",
+      // z-index 0 keeps it below the project buttons (z:1) on overlap
+      zIndex: "0",
+    });
+
+    this.mesh.instruments.forEach((inst, i) => {
+      const slot = document.createElement("div");
+      slot.className = "instrument-slot";
+      slot.dataset.name = inst.name;
+      Object.assign(slot.style, {
+        flex: "1",
+        cursor: "pointer",
+        borderTop: "2px solid transparent",
+        backgroundColor: "transparent",
+        transition: "background-color 0.25s, border-top 0.25s",
+      });
+      slot.addEventListener("mouseenter", () => {
+        slot.style.backgroundColor = "rgba(255,255,255,0.04)";
+      });
+      slot.addEventListener("mouseleave", () => {
+        slot.style.backgroundColor = "transparent";
+      });
+      slot.addEventListener("click", () => {
+        // Ensure audio is up — this click counts as the user gesture
+        this.mesh.start();
+        this.select(i);
+      });
+      bar.appendChild(slot);
+      this.slots.push(slot);
+    });
+
+    document.body.appendChild(bar);
+
+    // Floating label, briefly shown when instrument changes
+    const label = document.createElement("div");
+    Object.assign(label.style, {
+      position: "fixed",
+      bottom: "70px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      padding: "6px 14px",
+      background: "rgba(0,0,0,0.6)",
+      color: "#fff",
+      fontFamily: "Montserrat, sans-serif",
+      fontSize: "13px",
+      letterSpacing: "1px",
+      textTransform: "uppercase",
+      borderRadius: "16px",
+      pointerEvents: "none",
+      zIndex: "21",
+      opacity: "0",
+      transition: "opacity 0.4s",
+    });
+    document.body.appendChild(label);
+    this.labelEl = label;
+  }
+
+  select(idx) {
+    this.activeIndex = idx;
+    this.mesh.setInstrument(idx);
+    this.markActive(idx);
+    this.showLabel(this.mesh.instruments[idx].name);
+  }
+
+  markActive(idx) {
+    this.slots.forEach((s, i) => {
+      s.style.borderTop =
+        i === idx ? "2px solid rgba(8,177,243,0.65)" : "2px solid transparent";
+    });
+  }
+
+  showLabel(text) {
+    if (!this.labelEl) return;
+    this.labelEl.textContent = text;
+    this.labelEl.style.opacity = "0.92";
+    clearTimeout(this.labelTimer);
+    this.labelTimer = setTimeout(() => {
+      if (this.labelEl) this.labelEl.style.opacity = "0";
+    }, 1500);
   }
 }

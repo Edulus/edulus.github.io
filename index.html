@@ -63,6 +63,7 @@
         const background = new BackgroundField({ musicalMesh });
         const layout = new Layout();
         const animation = new Animation(layout);
+        const instrumentSelector = new InstrumentSelector(musicalMesh);
 
         // Browsers require a user gesture before AudioContext can start.
         // Any click anywhere — including on a project button — starts/resumes audio.
@@ -70,6 +71,8 @@
           musicalMesh.start();
           // Project-button clicks should navigate, not retune the mesh.
           if (e.target.closest(".button")) return;
+          // Instrument-slot clicks change the timbre, not the key.
+          if (e.target.closest(".instrument-slot")) return;
           // Grid click → set new key/octave and play a chord at that location
           const w = window.innerWidth;
           const h = window.innerHeight;
