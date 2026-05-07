@@ -1,7 +1,7 @@
 // layout.js
-export class Layout {
+class Layout {
   constructor() {
-    this.buttonEmojis = ["👽", "🥚", "✨", "🌀", "🔊"];
+    this.buttonEmojis = ["👽", "🥚", "✨", "🌀", "🔊", "🏓", null];
     this.buttons = document.querySelectorAll(".button");
     this.init();
   }
@@ -12,7 +12,9 @@ export class Layout {
 
   initializeButtons() {
     this.buttons.forEach((button, index) => {
-      button.textContent = this.buttonEmojis[index];
+      if (this.buttonEmojis[index] !== null) {
+        button.textContent = this.buttonEmojis[index];
+      }
     });
   }
 

@@ -1,5 +1,5 @@
 // animation.js
-export class Animation {
+class Animation {
   constructor(layout) {
     this.layout = layout;
     this.init();
@@ -22,19 +22,32 @@ export class Animation {
   }
 
   animateButton(button, emoji, url) {
-    const animatedEmoji = document.createElement("div");
-    animatedEmoji.textContent = emoji;
-    animatedEmoji.style.position = "fixed";
-    animatedEmoji.style.fontSize = "48px";
-    animatedEmoji.style.zIndex = "1000";
+    const img = button.querySelector("img");
+    let animatedEl;
+
+    if (img) {
+      animatedEl = img.cloneNode(true);
+      animatedEl.style.width = "94px";
+      animatedEl.style.height = "94px";
+      animatedEl.style.objectFit = "contain";
+    } else {
+      animatedEl = document.createElement("div");
+      animatedEl.textContent = emoji;
+      animatedEl.style.fontSize = "64px";
+      animatedEl.style.lineHeight = "1";
+    }
+
+    animatedEl.style.position = "fixed";
+    animatedEl.style.zIndex = "1000";
+    animatedEl.style.pointerEvents = "none";
 
     const rect = button.getBoundingClientRect();
-    animatedEmoji.style.left = `${rect.left + rect.width / 2}px`;
-    animatedEmoji.style.top = `${rect.top + rect.height / 2}px`;
+    animatedEl.style.left = `${rect.left + rect.width / 2}px`;
+    animatedEl.style.top = `${rect.top + rect.height / 2}px`;
 
-    document.body.appendChild(animatedEmoji);
+    document.body.appendChild(animatedEl);
 
-    const animation = animatedEmoji.animate(
+    const animation = animatedEl.animate(
       [
         { transform: "translate(-50%, -50%) scale(1)", opacity: 1 },
         { transform: "translate(-50%, -50%) scale(8)", opacity: 0 },
@@ -46,7 +59,7 @@ export class Animation {
     );
 
     animation.onfinish = () => {
-      animatedEmoji.remove();
+      animatedEl.remove();
       window.location.href = url;
     };
   }

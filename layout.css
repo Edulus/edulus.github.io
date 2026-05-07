@@ -1,29 +1,33 @@
 /* layout.css */
+
+/*
+  Hexagonal layout: 1 center + 6 surrounding at R=180px.
+  Container is 500×500. Button is 125×125 (half = 62.5).
+  Container center is (250, 250). For a button at angle θ from center:
+    left = 250 + 180*cos(θ) - 62.5
+    top  = 250 + 180*sin(θ) - 62.5
+  Outer angles, starting at top and going clockwise: -90°, -30°, 30°, 90°, 150°, 210°.
+  Gap between adjacent outer buttons ≈ 31px.
+*/
+
 .container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 60vh;
-  height: 60vh;
   position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  padding: 20px;
+  width: 500px;
+  height: 500px;
+  flex-shrink: 0;
 }
 
 .button-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30%;
-  height: 30%;
-  box-sizing: border-box;
+  position: absolute;
+  width: 125px;
+  height: 125px;
 }
 
 .button {
   width: 125px;
   height: 125px;
-  font-size: 48px;
+  font-size: 64px;
+  line-height: 1;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -35,43 +39,38 @@
   text-decoration: none;
   position: relative;
   z-index: 1;
+  overflow: hidden;
 }
 
-/* Pentagon positioning */
-#button1Wrapper {
-  order: 1;
-  width: 100%;
+/* Image icons — 75% size so the icon floats inside the tile. */
+.button img {
+  width: 75%;
+  height: 75%;
+  object-fit: contain;
 }
 
-#button2Wrapper {
-  order: 2;
-  margin-top: 0px;
-  width: 45%;
-  margin-right: 5%;
-}
+/* Center */
+#button1Wrapper { left: 187.5px; top: 187.5px; }
 
-#button3Wrapper {
-  order: 3;
-  margin-top: 0px;
-  margin-left: 5%;
-  width: 45%;
-}
+/* Top */
+#button2Wrapper { left: 187.5px; top: 7.5px; }
 
-#button4Wrapper {
-  order: 4;
-  width: 35%;
-  margin-left: 10%;
-  margin-top: 7px;
-}
+/* Top-right */
+#button3Wrapper { left: 343.4px; top: 97.5px; }
 
-#button5Wrapper {
-  order: 5;
-  width: 35%;
-  margin-right: 10%;
-  margin-top: 7px;
-}
+/* Bottom-right */
+#button4Wrapper { left: 343.4px; top: 277.5px; }
 
-/* Tooltip positioning */
+/* Bottom */
+#button5Wrapper { left: 187.5px; top: 367.5px; }
+
+/* Bottom-left */
+#button6Wrapper { left: 31.6px; top: 277.5px; }
+
+/* Top-left */
+#button7Wrapper { left: 31.6px; top: 97.5px; }
+
+/* Tooltip */
 .button-wrapper .tooltip {
   visibility: hidden;
   width: 180px;

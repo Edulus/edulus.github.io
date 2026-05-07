@@ -42,11 +42,20 @@
         <a href="https://edulus.github.io/YT-DLP_Web_Interface/" class="button" id="button5"></a>
         <div class="tooltip">YouTube Audio Extractor</div>
       </div>
+      <div class="button-wrapper" id="button6Wrapper">
+        <a href="https://edulus.github.io/space-pong/" class="button" id="button6"></a>
+        <div class="tooltip">Space Pong</div>
+      </div>
+      <div class="button-wrapper" id="button7Wrapper">
+        <a href="https://edulus.github.io/camp-location-chooser/" class="button" id="button7">
+          <img src="https://raw.githubusercontent.com/Edulus/camp-location-chooser/main/3D%20SideBurn%20Logo.png" alt="Camp Location Chooser" />
+        </a>
+        <div class="tooltip">Camp Location Chooser</div>
+      </div>
     </div>
-    <script type="module">
-      import { Layout } from './layout.js';
-      import { Animation } from './animation.js';
-      
+    <script src="layout.js"></script>
+    <script src="animation.js"></script>
+    <script>
       document.addEventListener("DOMContentLoaded", () => {
         const layout = new Layout();
         const animation = new Animation(layout);
