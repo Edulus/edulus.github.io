@@ -28,9 +28,12 @@ class BackgroundField {
     this.cyanSpacing = 34;
     this.influenceRadius = 140;
 
-    // Colors lifted from the original CSS palette
+    // Colors lifted from the original CSS palette.
+    // cyanColor shifts on grid clicks to mirror the musical key/octave change;
+    // it eases toward targetCyanColor each frame for a smooth transition.
     this.pinkColor = [240, 60, 159];
     this.cyanColor = [8, 177, 243];
+    this.targetCyanColor = [8, 177, 243];
 
     // Pre-render the cyan halo as a sprite so each dot is a true soft gradient,
     // not a flat-alpha arc. drawImage of a sprite is also faster than per-dot gradient.
@@ -156,6 +159,29 @@ class BackgroundField {
     }
   }
 
+  // Sound→color mapping called from the grid click handler.
+  // keyOffset (0..11 semitones) walks the hue around the color wheel;
+  // octaveOffset (-1..+1) brightens or darkens the dot.
+  setKeyColor(keyOffset, octaveOffset) {
+    const hue = (195 + keyOffset * 30) % 360;
+    const lightness = 50 + octaveOffset * 12;
+    this.targetCyanColor = this.hslToRgb(hue, 92, lightness);
+  }
+
+  hslToRgb(h, s, l) {
+    s /= 100;
+    l /= 100;
+    const k = (n) => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n) =>
+      l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return [
+      Math.round(255 * f(0)),
+      Math.round(255 * f(8)),
+      Math.round(255 * f(4)),
+    ];
+  }
+
   animate() {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -170,6 +196,21 @@ class BackgroundField {
     // 3-second breath cycle, value in [0, 1]
     const t = (performance.now() - this.startTime) / 1000;
     const breathe = (Math.sin(t * 2.094) + 1) / 2;
+
+    // Ease cyanColor toward the target (set on each grid click) and rebuild
+    // the halo sprite when it actually shifted. Converges in ~0.5s at 60fps.
+    let colorChanged = false;
+    for (let i = 0; i < 3; i++) {
+      const diff = this.targetCyanColor[i] - this.cyanColor[i];
+      if (Math.abs(diff) > 0.5) {
+        this.cyanColor[i] += diff * 0.08;
+        colorChanged = true;
+      } else if (this.cyanColor[i] !== this.targetCyanColor[i]) {
+        this.cyanColor[i] = this.targetCyanColor[i];
+        colorChanged = true;
+      }
+    }
+    if (colorChanged) this.haloSprite = this.buildHaloSprite();
 
     // Update excitement for both layers
     this.exciteDots(this.pinkDots, mx, my, rSq, r);
