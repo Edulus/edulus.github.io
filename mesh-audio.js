@@ -44,7 +44,7 @@ class MusicalMesh {
 
     // Instrument voices — each is { name, voice(freq, intensity, time) }
     this.instruments = [
-      { name: "Clarinet", voice: this.voiceClarinet },
+      { name: "Trumpet", voice: this.voiceTrumpet },
       { name: "Bass Guitar", voice: this.voiceBass },
       { name: "Piano", voice: this.voicePiano },
       { name: "Harpsichord", voice: this.voiceHarpsichord },
@@ -169,19 +169,22 @@ class MusicalMesh {
   // ============ INSTRUMENT VOICES ============
   // Each takes (freq, intensity, time) and creates oscillator(s) + envelope.
 
-  // Clarinet: hollow tone from odd-harmonic-dominant additive synthesis
-  voiceClarinet(freq, intensity, time) {
+  // Trumpet: bright brass tone from full integer-harmonic additive synthesis
+  // with strong 2nd/3rd partials and a sharp attack for the brassy "blat".
+  voiceTrumpet(freq, intensity, time) {
     const harmonics = [
-      { mult: 1, gain: 0.6 },
-      { mult: 3, gain: 0.3 },
-      { mult: 5, gain: 0.15 },
-      { mult: 7, gain: 0.07 },
+      { mult: 1, gain: 0.4 },
+      { mult: 2, gain: 0.5 },
+      { mult: 3, gain: 0.45 },
+      { mult: 4, gain: 0.3 },
+      { mult: 5, gain: 0.2 },
+      { mult: 6, gain: 0.1 },
     ];
     const env = this.audioCtx.createGain();
     env.gain.setValueAtTime(0, time);
-    env.gain.linearRampToValueAtTime(0.4 * intensity, time + 0.06);
-    env.gain.linearRampToValueAtTime(0.32 * intensity, time + 0.4);
-    env.gain.exponentialRampToValueAtTime(0.001, time + 1.4);
+    env.gain.linearRampToValueAtTime(0.42 * intensity, time + 0.025);
+    env.gain.linearRampToValueAtTime(0.32 * intensity, time + 0.35);
+    env.gain.exponentialRampToValueAtTime(0.001, time + 1.2);
     env.connect(this.master);
 
     for (const h of harmonics) {
@@ -405,7 +408,7 @@ class InstrumentSelector {
     this.slots = [];
     this.emojiEls = [];
     // One emoji per instrument, in the same order as mesh.instruments
-    this.emojis = ["🪈", "🎸", "🎹", "🎼", "🔔", "☁️", "🪕"];
+    this.emojis = ["🎺", "🎸", "🎹", "🎼", "🔔", "☁️", "🪕"];
     this.activeIndex = 0;
     this.labelEl = null;
     this.labelTimer = null;
