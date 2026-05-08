@@ -157,7 +157,7 @@ class BackgroundField {
         const eased = intensity * intensity;
         if (eased > d.excitement) d.excitement = eased;
       }
-      d.excitement *= 0.93;
+      d.excitement *= 0.97;
     }
   }
 
