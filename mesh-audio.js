@@ -403,6 +403,9 @@ class InstrumentSelector {
   constructor(mesh) {
     this.mesh = mesh;
     this.slots = [];
+    this.emojiEls = [];
+    // One emoji per instrument, in the same order as mesh.instruments
+    this.emojis = ["🪈", "🎸", "🎹", "🎼", "🔔", "☁️", "🪕"];
     this.activeIndex = 0;
     this.labelEl = null;
     this.labelTimer = null;
@@ -434,12 +437,31 @@ class InstrumentSelector {
         borderTop: "2px solid transparent",
         backgroundColor: "transparent",
         transition: "background-color 0.25s, border-top 0.25s",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
       });
+
+      // Emoji preview — fades in on hover, stays solid when slot is active
+      const emojiEl = document.createElement("div");
+      emojiEl.textContent = this.emojis[i] || "";
+      Object.assign(emojiEl.style, {
+        fontSize: "32px",
+        lineHeight: "1",
+        opacity: "0",
+        transition: "opacity 0.3s",
+        pointerEvents: "none",
+      });
+      slot.appendChild(emojiEl);
+
       slot.addEventListener("mouseenter", () => {
         slot.style.backgroundColor = "rgba(255,255,255,0.04)";
+        emojiEl.style.opacity = "0.85";
       });
       slot.addEventListener("mouseleave", () => {
         slot.style.backgroundColor = "transparent";
+        // Active slot's emoji stays visible; others fade out
+        if (i !== this.activeIndex) emojiEl.style.opacity = "0";
       });
       slot.addEventListener("click", () => {
         // Ensure audio is up — this click counts as the user gesture
@@ -448,6 +470,7 @@ class InstrumentSelector {
       });
       bar.appendChild(slot);
       this.slots.push(slot);
+      this.emojiEls.push(emojiEl);
     });
 
     document.body.appendChild(bar);
@@ -487,6 +510,10 @@ class InstrumentSelector {
     this.slots.forEach((s, i) => {
       s.style.borderTop =
         i === idx ? "2px solid rgba(8,177,243,0.65)" : "2px solid transparent";
+    });
+    // Active emoji stays at full opacity; others fade out (unless hovered).
+    this.emojiEls.forEach((el, i) => {
+      el.style.opacity = i === idx ? "1" : "0";
     });
   }
 
