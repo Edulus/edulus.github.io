@@ -23,17 +23,19 @@ class BackgroundField {
     this.mouse = { x: -9999, y: -9999 };
     this.startTime = performance.now();
 
-    // Layer geometry
-    this.pinkSpacing = 17;
-    this.cyanSpacing = 34;
+    // Layer geometry — ~12% denser than the original 17/34 spacing
+    this.pinkSpacing = 15;
+    this.cyanSpacing = 30;
     this.influenceRadius = 140;
 
     // Colors lifted from the original CSS palette.
-    // cyanColor shifts on grid clicks to mirror the musical key/octave change;
-    // it eases toward targetCyanColor each frame for a smooth transition.
+    // Both layers shift on grid clicks to mirror the musical key/octave change.
+    // pink targets the complementary hue of cyan so the two layers always read
+    // as a coordinated pair. Each color eases toward its target each frame.
     this.pinkColor = [240, 60, 159];
     this.cyanColor = [8, 177, 243];
     this.targetCyanColor = [8, 177, 243];
+    this.targetPinkColor = [240, 60, 159];
 
     // Pre-render the cyan halo as a sprite so each dot is a true soft gradient,
     // not a flat-alpha arc. drawImage of a sprite is also faster than per-dot gradient.
@@ -166,6 +168,9 @@ class BackgroundField {
     const hue = (195 + keyOffset * 30) % 360;
     const lightness = 50 + octaveOffset * 12;
     this.targetCyanColor = this.hslToRgb(hue, 92, lightness);
+    // Pink tracks the complementary hue (180° opposite) at the original
+    // pink saturation/lightness so it stays a "small structural" accent.
+    this.targetPinkColor = this.hslToRgb((hue + 180) % 360, 86, 59);
   }
 
   hslToRgb(h, s, l) {
@@ -211,6 +216,17 @@ class BackgroundField {
       }
     }
     if (colorChanged) this.haloSprite = this.buildHaloSprite();
+
+    // Pink also eases toward its target — no sprite to rebuild since the pink
+    // dots are drawn directly with fillStyle each frame.
+    for (let i = 0; i < 3; i++) {
+      const diff = this.targetPinkColor[i] - this.pinkColor[i];
+      if (Math.abs(diff) > 0.5) {
+        this.pinkColor[i] += diff * 0.08;
+      } else if (this.pinkColor[i] !== this.targetPinkColor[i]) {
+        this.pinkColor[i] = this.targetPinkColor[i];
+      }
+    }
 
     // Update excitement for both layers
     this.exciteDots(this.pinkDots, mx, my, rSq, r);
