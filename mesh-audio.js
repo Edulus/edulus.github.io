@@ -437,9 +437,8 @@ class InstrumentSelector {
       Object.assign(slot.style, {
         flex: "1",
         cursor: "pointer",
-        borderTop: "2px solid transparent",
         backgroundColor: "transparent",
-        transition: "background-color 0.25s, border-top 0.25s",
+        transition: "background-color 0.25s",
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
@@ -462,9 +461,11 @@ class InstrumentSelector {
         emojiEl.style.opacity = "0.85";
       });
       slot.addEventListener("mouseleave", () => {
-        slot.style.backgroundColor = "transparent";
-        // Active slot's emoji stays visible; others fade out
-        if (i !== this.activeIndex) emojiEl.style.opacity = "0";
+        // Active slot keeps the white tint as its persistent indicator
+        if (i !== this.activeIndex) {
+          slot.style.backgroundColor = "transparent";
+          emojiEl.style.opacity = "0";
+        }
       });
       slot.addEventListener("click", () => {
         // Ensure audio is up — this click counts as the user gesture
@@ -510,9 +511,10 @@ class InstrumentSelector {
   }
 
   markActive(idx) {
+    // Active slot keeps the same 4% white tint as hover; inactive slots clear.
     this.slots.forEach((s, i) => {
-      s.style.borderTop =
-        i === idx ? "2px solid rgba(8,177,243,0.65)" : "2px solid transparent";
+      s.style.backgroundColor =
+        i === idx ? "rgba(255,255,255,0.04)" : "transparent";
     });
     // Active emoji stays at full opacity; others fade out (unless hovered).
     this.emojiEls.forEach((el, i) => {
