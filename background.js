@@ -30,17 +30,26 @@ class BackgroundField {
 
     // Colors lifted from the original CSS palette.
     // Both layers shift on grid clicks to mirror the musical key/octave change.
-    // pink targets the complementary hue of cyan so the two layers always read
-    // as a coordinated pair. Each color eases toward its target each frame.
+    // The shift is propagated as an outward wavefront from the click point
+    // (see this.wave below), not as a global ease.
     this.pinkColor = [240, 60, 159];
     this.cyanColor = [8, 177, 243];
-    this.targetCyanColor = [8, 177, 243];
     this.targetPinkColor = [240, 60, 159];
+    this.targetCyanColor = [8, 177, 243];
 
     // Pre-render the cyan halo as a sprite so each dot is a true soft gradient,
     // not a flat-alpha arc. drawImage of a sprite is also faster than per-dot gradient.
-    this.haloSprite = this.buildHaloSprite();
+    this.haloSprite = this.buildHaloSprite(this.cyanColor);
+    this.targetHaloSprite = this.haloSprite;
     this.haloSpriteRadius = this.haloSprite.width / 2;
+
+    // Wavefront state — set when setKeyColor is called with an origin.
+    // The front expands at waveSpeed px/sec; waveBand sets the soft transition
+    // width at the leading edge so dots cross from old→new color over a band
+    // rather than a hard ring.
+    this.wave = null;
+    this.waveSpeed = 900;
+    this.waveBand = 140;
 
     this.resize();
 
@@ -74,13 +83,13 @@ class BackgroundField {
     requestAnimationFrame(this.animate);
   }
 
-  buildHaloSprite() {
+  buildHaloSprite(color) {
     const r = 16;
     const size = r * 2;
     const c = document.createElement("canvas");
     c.width = c.height = size;
     const cctx = c.getContext("2d");
-    const [cr, cg, cb] = this.cyanColor;
+    const [cr, cg, cb] = color;
     const grad = cctx.createRadialGradient(r, r, 0, r, r, r);
     grad.addColorStop(0, `rgba(${cr},${cg},${cb},0.65)`);
     grad.addColorStop(0.35, `rgba(${cr},${cg},${cb},0.25)`);
@@ -162,15 +171,42 @@ class BackgroundField {
   }
 
   // Sound→color mapping called from the grid click handler.
-  // keyOffset (0..11 semitones) walks the hue around the color wheel;
-  // octaveOffset (-1..+1) brightens or darkens the dot.
-  setKeyColor(keyOffset, octaveOffset) {
-    const hue = (195 + keyOffset * 30) % 360;
-    const lightness = 50 + octaveOffset * 12;
-    this.targetCyanColor = this.hslToRgb(hue, 92, lightness);
-    // Pink tracks the complementary hue (180° opposite) at the original
-    // pink saturation/lightness so it stays a "small structural" accent.
-    this.targetPinkColor = this.hslToRgb((hue + 180) % 360, 86, 59);
+  // Palette is drawn from the *iridescent* spectrum (nacreous cloud / cloud
+  // iridescence) — pastel mint, cyan, lavender, pink, peach — rather than
+  // the saturated rainbow wheel. keyOffset (0..11 semitones) walks the hue
+  // through that cycle; octaveOffset (-1..+1) shifts pastel lightness.
+  // (originX, originY) — when supplied, the new color expands outward from
+  // that point as a visible wavefront. Without an origin, the change is
+  // applied instantly (used at startup).
+  setKeyColor(keyOffset, octaveOffset, originX, originY) {
+    // If a previous wave is still in flight, snap it to its target so the
+    // new wave starts from a clean uniform baseline.
+    if (this.wave) {
+      this.cyanColor = this.targetCyanColor.slice();
+      this.pinkColor = this.targetPinkColor.slice();
+      this.haloSprite = this.targetHaloSprite;
+      this.wave = null;
+    }
+
+    // Start at pink (~315°) and walk forward 30°/semitone so consecutive
+    // keys land on adjacent iridescent bands: pink → peach → soft yellow →
+    // mint → cyan → lavender → back to pink.
+    const hue = (315 + keyOffset * 30) % 360;
+    const lightness = 62 + octaveOffset * 8;
+    this.targetCyanColor = this.hslToRgb(hue, 88, lightness);
+    // Pink layer tracks an *analogous* neighbor (+60°) on the same iridescent
+    // ring — adjacent bands in real iridescence sit next to each other, not
+    // across the wheel — so the two layers read as one coordinated pearly arc.
+    this.targetPinkColor = this.hslToRgb((hue + 60) % 360, 86, 64);
+    this.targetHaloSprite = this.buildHaloSprite(this.targetCyanColor);
+
+    if (originX !== undefined && originY !== undefined) {
+      this.wave = { x: originX, y: originY, startTime: performance.now() };
+    } else {
+      this.cyanColor = this.targetCyanColor.slice();
+      this.pinkColor = this.targetPinkColor.slice();
+      this.haloSprite = this.targetHaloSprite;
+    }
   }
 
   hslToRgb(h, s, l) {
@@ -202,29 +238,28 @@ class BackgroundField {
     const t = (performance.now() - this.startTime) / 1000;
     const breathe = (Math.sin(t * 2.094) + 1) / 2;
 
-    // Ease cyanColor toward the target (set on each grid click) and rebuild
-    // the halo sprite when it actually shifted. Converges in ~0.5s at 60fps.
-    let colorChanged = false;
-    for (let i = 0; i < 3; i++) {
-      const diff = this.targetCyanColor[i] - this.cyanColor[i];
-      if (Math.abs(diff) > 0.5) {
-        this.cyanColor[i] += diff * 0.08;
-        colorChanged = true;
-      } else if (this.cyanColor[i] !== this.targetCyanColor[i]) {
-        this.cyanColor[i] = this.targetCyanColor[i];
-        colorChanged = true;
+    // Wavefront state for this frame. waveRadius grows linearly from the
+    // click point; per-dot progress p = clamp((waveRadius - dist)/band, 0, 1)
+    // — old color at p=0, new color at p=1, soft band in between.
+    let waveRadius = 0;
+    if (this.wave) {
+      waveRadius =
+        ((performance.now() - this.wave.startTime) / 1000) * this.waveSpeed;
+      // Once the front has cleared the farthest corner + the band, the entire
+      // grid is on the new color — adopt the target and end the wave.
+      const corners = [[0, 0], [w, 0], [0, h], [w, h]];
+      let maxD = 0;
+      for (let i = 0; i < 4; i++) {
+        const dx = corners[i][0] - this.wave.x;
+        const dy = corners[i][1] - this.wave.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d > maxD) maxD = d;
       }
-    }
-    if (colorChanged) this.haloSprite = this.buildHaloSprite();
-
-    // Pink also eases toward its target — no sprite to rebuild since the pink
-    // dots are drawn directly with fillStyle each frame.
-    for (let i = 0; i < 3; i++) {
-      const diff = this.targetPinkColor[i] - this.pinkColor[i];
-      if (Math.abs(diff) > 0.5) {
-        this.pinkColor[i] += diff * 0.08;
-      } else if (this.pinkColor[i] !== this.targetPinkColor[i]) {
-        this.pinkColor[i] = this.targetPinkColor[i];
+      if (waveRadius > maxD + this.waveBand) {
+        this.cyanColor = this.targetCyanColor.slice();
+        this.pinkColor = this.targetPinkColor.slice();
+        this.haloSprite = this.targetHaloSprite;
+        this.wave = null;
       }
     }
 
@@ -238,35 +273,81 @@ class BackgroundField {
     }
 
     // --- Cyan halo layer (drawn first, behind) — this layer carries the mouse reaction ---
-    const sprite = this.haloSprite;
+    const oldSprite = this.haloSprite;
+    const newSprite = this.targetHaloSprite;
     const sr = this.haloSpriteRadius;
+    const wave = this.wave;
+    const band = this.waveBand;
     for (let i = 0; i < this.cyanDots.length; i++) {
       const d = this.cyanDots[i];
-      const e = d.excitement;
+
+      // If a wave is sweeping over this dot, the band itself acts like a
+      // bow wave: dots in the middle of their old→new transition (p≈0.5)
+      // get a bell-curve excitement boost so the front visibly glows.
+      let p = 0;
+      let waveGlow = 0;
+      if (wave) {
+        const wdx = d.x - wave.x;
+        const wdy = d.y - wave.y;
+        const dist = Math.sqrt(wdx * wdx + wdy * wdy);
+        p = Math.max(0, Math.min(1, (waveRadius - dist) / band));
+        if (p > 0 && p < 1) waveGlow = Math.sin(p * Math.PI);
+      }
+
+      // Combine pointer excitement with wavefront glow (capped near 1).
+      const eFinal = Math.min(1.4, d.excitement + waveGlow);
       // Big growth on excitement: ~6 at rest → ~30 at full excitement
-      const haloR = 6 + breathe * 2 + e * 24;
+      const haloR = 6 + breathe * 2 + eFinal * 24;
       const scale = haloR / sr;
       const drawSize = sr * 2 * scale;
-      // Strong opacity boost when excited so the blue really pops
-      ctx.globalAlpha = Math.min(1, 0.7 + e * 1.2);
-      ctx.drawImage(
-        sprite,
-        d.x - drawSize / 2,
-        d.y - drawSize / 2,
-        drawSize,
-        drawSize
-      );
+      const baseAlpha = Math.min(1, 0.7 + eFinal * 1.2);
+      const dx = d.x - drawSize / 2;
+      const dy = d.y - drawSize / 2;
+
+      if (wave) {
+        if (p < 1) {
+          ctx.globalAlpha = baseAlpha * (1 - p);
+          ctx.drawImage(oldSprite, dx, dy, drawSize, drawSize);
+        }
+        if (p > 0) {
+          ctx.globalAlpha = baseAlpha * p;
+          ctx.drawImage(newSprite, dx, dy, drawSize, drawSize);
+        }
+      } else {
+        ctx.globalAlpha = baseAlpha;
+        ctx.drawImage(oldSprite, dx, dy, drawSize, drawSize);
+      }
     }
     ctx.globalAlpha = 1;
 
     // --- Pink dot layer (drawn on top) — stays subtle, just the breathing pulse ---
-    const [cr1, cg1, cb1] = this.pinkColor;
+    const op = this.pinkColor;
+    const np = this.targetPinkColor;
     for (let i = 0; i < this.pinkDots.length; i++) {
       const d = this.pinkDots[i];
-      // Minimal mouse reaction — let the blue do the work
-      const e = d.excitement * 0.15;
-      const size = 0.5 + breathe * 0.3 + e * 1.5;
-      const alpha = 0.4 + breathe * 0.15 + e * 0.15;
+
+      let p = 0;
+      let waveGlow = 0;
+      if (wave) {
+        const wdx = d.x - wave.x;
+        const wdy = d.y - wave.y;
+        const dist = Math.sqrt(wdx * wdx + wdy * wdy);
+        p = Math.max(0, Math.min(1, (waveRadius - dist) / band));
+        if (p > 0 && p < 1) waveGlow = Math.sin(p * Math.PI);
+      }
+
+      // Pink only weakly responds to the pointer (×0.15) but fully to the
+      // wavefront — so the bow wave reads strongly on the small pink dots.
+      const e = d.excitement * 0.15 + waveGlow;
+      const size = 0.5 + breathe * 0.3 + e * 1.8;
+      const alpha = Math.min(1, 0.4 + breathe * 0.15 + e * 0.45);
+
+      let cr1 = op[0], cg1 = op[1], cb1 = op[2];
+      if (wave) {
+        cr1 = (op[0] + (np[0] - op[0]) * p) | 0;
+        cg1 = (op[1] + (np[1] - op[1]) * p) | 0;
+        cb1 = (op[2] + (np[2] - op[2]) * p) | 0;
+      }
 
       ctx.fillStyle = `rgba(${cr1},${cg1},${cb1},${alpha})`;
       ctx.beginPath();

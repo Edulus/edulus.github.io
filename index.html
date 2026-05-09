@@ -84,7 +84,7 @@
           const h = window.innerHeight;
           musicalMesh.setAnchor(e.clientX, e.clientY, w, h);
           background.flashAt(e.clientX, e.clientY);
-          background.setKeyColor(musicalMesh.keyOffset, musicalMesh.octaveOffset);
+          background.setKeyColor(musicalMesh.keyOffset, musicalMesh.octaveOffset, e.clientX, e.clientY);
           musicalMesh.retriggerAt(background.cyanDots, e.clientX, e.clientY, w, h);
         });
       });
