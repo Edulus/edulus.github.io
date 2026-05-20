@@ -21,12 +21,32 @@ class BackgroundField {
     this.ctx = this.canvas.getContext("2d");
 
     this.mouse = { x: -9999, y: -9999 };
+    this.prevMouse = { x: -9999, y: -9999 };
     this.startTime = performance.now();
 
     // Layer geometry — ~12% denser than the original 17/34 spacing
-    this.pinkSpacing = 15;
+    this.pinkSpacing = 30;
     this.cyanSpacing = 30;
-    this.influenceRadius = 140;
+
+    // Tunable dials, surfaced for the live Tuner UI (?tune=1).
+    // Defaults are the values that ship; the panel writes back to these.
+    this.influenceRadius = 150;
+    this.decayFactor = 0.935;
+    this.haloGrowth = 15;
+    this.falloffPower = 3;
+    this.haloCenterAlpha = 1.0;
+    this.haloMidstopPos = 0.46;
+    this.haloMidstopAlpha = 0.50;
+
+    // Pip layer dials, surfaced for ?tune=2.
+    // pipHueOffset is the degrees on the iridescent wheel between halo and
+    // pip — 180 makes them true complements, 60 was the original analogous.
+    this.pipHueOffset = 220;
+    this.pipResponse = 0.75;
+    this.pipRestSize = 1.3;
+    this.pipExcitedSize = 4.2;
+    this.pipRestAlpha = 1.0;
+    this.pipExcitedAlpha = 1.0;
 
     // Colors lifted from the original CSS palette.
     // Both layers shift on grid clicks to mirror the musical key/octave change.
@@ -91,12 +111,51 @@ class BackgroundField {
     const cctx = c.getContext("2d");
     const [cr, cg, cb] = color;
     const grad = cctx.createRadialGradient(r, r, 0, r, r, r);
-    grad.addColorStop(0, `rgba(${cr},${cg},${cb},0.65)`);
-    grad.addColorStop(0.35, `rgba(${cr},${cg},${cb},0.25)`);
+    grad.addColorStop(0, `rgba(${cr},${cg},${cb},${this.haloCenterAlpha})`);
+    grad.addColorStop(this.haloMidstopPos, `rgba(${cr},${cg},${cb},${this.haloMidstopAlpha})`);
     grad.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
     cctx.fillStyle = grad;
     cctx.fillRect(0, 0, size, size);
     return c;
+  }
+
+  // Called by the Tuner whenever a sprite-shape dial changes so both the
+  // current and target sprites repaint without waiting for a wave to finish.
+  rebuildHaloSprites() {
+    this.haloSprite = this.buildHaloSprite(this.cyanColor);
+    this.targetHaloSprite = this.buildHaloSprite(this.targetCyanColor);
+    this.haloSpriteRadius = this.haloSprite.width / 2;
+  }
+
+  // Re-derive the pip grid after pinkSpacing changes.
+  regridPinks() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    this.pinkDots = this.makeGrid(w, h, this.pinkSpacing, 0);
+  }
+
+  // After pipHueOffset changes, recompute both current and target pip colors
+  // from the current/target halo hues so the shift is visible immediately
+  // (rather than waiting for the next key click).
+  rebuildPinkColor() {
+    const curHue = this.rgbToHue(this.cyanColor);
+    const tgtHue = this.rgbToHue(this.targetCyanColor);
+    this.pinkColor = this.hslToRgb((curHue + this.pipHueOffset) % 360, 86, 64);
+    this.targetPinkColor = this.hslToRgb((tgtHue + this.pipHueOffset) % 360, 86, 64);
+  }
+
+  rgbToHue(rgb) {
+    const r = rgb[0] / 255, g = rgb[1] / 255, b = rgb[2] / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    if (max === min) return 0;
+    const d = max - min;
+    let h;
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    return h < 0 ? h + 360 : h;
   }
 
   resize() {
@@ -155,7 +214,16 @@ class BackgroundField {
     }
   }
 
-  exciteDots(dots, mx, my, rSq, r) {
+  decayDots(dots, factor) {
+    for (let i = 0; i < dots.length; i++) {
+      dots[i].excitement *= factor;
+    }
+  }
+
+  // Cubic falloff concentrates excitement near the cursor; called once per
+  // sample point along the mouse path so fast flicks paint a continuous ribbon
+  // rather than discrete blobs at each animation frame's mouse position.
+  exciteDotsAt(dots, mx, my, rSq, r) {
     for (let i = 0; i < dots.length; i++) {
       const d = dots[i];
       const dx = d.x - mx;
@@ -163,10 +231,9 @@ class BackgroundField {
       const distSq = dx * dx + dy * dy;
       if (distSq < rSq) {
         const intensity = 1 - Math.sqrt(distSq) / r;
-        const eased = intensity * intensity;
+        const eased = Math.pow(intensity, this.falloffPower);
         if (eased > d.excitement) d.excitement = eased;
       }
-      d.excitement *= 0.97;
     }
   }
 
@@ -194,10 +261,10 @@ class BackgroundField {
     const hue = (315 + keyOffset * 30) % 360;
     const lightness = 62 + octaveOffset * 8;
     this.targetCyanColor = this.hslToRgb(hue, 88, lightness);
-    // Pink layer tracks an *analogous* neighbor (+60°) on the same iridescent
-    // ring — adjacent bands in real iridescence sit next to each other, not
-    // across the wheel — so the two layers read as one coordinated pearly arc.
-    this.targetPinkColor = this.hslToRgb((hue + 60) % 360, 86, 64);
+    // Pip layer hue is offset from the halo by this.pipHueOffset degrees on
+    // the same iridescent ring. Default 180° = true complement (so the small
+    // dots always read as a distinct accent against the halo color).
+    this.targetPinkColor = this.hslToRgb((hue + this.pipHueOffset) % 360, 86, 64);
     this.targetHaloSprite = this.buildHaloSprite(this.targetCyanColor);
 
     if (originX !== undefined && originY !== undefined) {
@@ -263,9 +330,38 @@ class BackgroundField {
       }
     }
 
-    // Update excitement for both layers
-    this.exciteDots(this.pinkDots, mx, my, rSq, r);
-    this.exciteDots(this.cyanDots, mx, my, rSq, r);
+    // Decay all dots once per frame, then seed excitement at multiple points
+    // along the mouse path so a fast flick lays down a continuous ribbon
+    // instead of two disconnected kernels at the frame endpoints.
+    this.decayDots(this.pinkDots, this.decayFactor);
+    this.decayDots(this.cyanDots, this.decayFactor);
+
+    const pmx = this.prevMouse.x;
+    const pmy = this.prevMouse.y;
+    const mouseValid = mx > -9000;
+    const prevValid = pmx > -9000;
+    const sampleSpacing = r * 0.25;
+
+    if (mouseValid && prevValid) {
+      const sdx = mx - pmx;
+      const sdy = my - pmy;
+      const segLen = Math.sqrt(sdx * sdx + sdy * sdy);
+      // Cap samples to avoid pathological cost on huge jumps (e.g. tab focus).
+      const samples = Math.min(20, Math.max(1, Math.ceil(segLen / sampleSpacing)));
+      for (let s = 1; s <= samples; s++) {
+        const t = s / samples;
+        const sx = pmx + sdx * t;
+        const sy = pmy + sdy * t;
+        this.exciteDotsAt(this.pinkDots, sx, sy, rSq, r);
+        this.exciteDotsAt(this.cyanDots, sx, sy, rSq, r);
+      }
+    } else if (mouseValid) {
+      this.exciteDotsAt(this.pinkDots, mx, my, rSq, r);
+      this.exciteDotsAt(this.cyanDots, mx, my, rSq, r);
+    }
+
+    this.prevMouse.x = mx;
+    this.prevMouse.y = my;
 
     // Feed excitement updates to the musical mesh — cyan dots are the "keys"
     if (this.musicalMesh) {
@@ -297,7 +393,7 @@ class BackgroundField {
       // Combine pointer excitement with wavefront glow (capped near 1).
       const eFinal = Math.min(1.4, d.excitement + waveGlow);
       // Big growth on excitement: ~6 at rest → ~30 at full excitement
-      const haloR = 6 + breathe * 2 + eFinal * 24;
+      const haloR = 6 + breathe * 2 + eFinal * this.haloGrowth;
       const scale = haloR / sr;
       const drawSize = sr * 2 * scale;
       const baseAlpha = Math.min(1, 0.7 + eFinal * 1.2);
@@ -336,11 +432,11 @@ class BackgroundField {
         if (p > 0 && p < 1) waveGlow = Math.sin(p * Math.PI);
       }
 
-      // Pink only weakly responds to the pointer (×0.15) but fully to the
-      // wavefront — so the bow wave reads strongly on the small pink dots.
-      const e = d.excitement * 0.15 + waveGlow;
-      const size = 0.5 + breathe * 0.3 + e * 1.8;
-      const alpha = Math.min(1, 0.4 + breathe * 0.15 + e * 0.45);
+      // Pips weakly respond to the pointer (pipResponse, default 0.15) but
+      // fully to the wavefront — so the bow wave reads strongly on them.
+      const e = d.excitement * this.pipResponse + waveGlow;
+      const size = this.pipRestSize + breathe * 0.3 + e * this.pipExcitedSize;
+      const alpha = Math.min(1, this.pipRestAlpha + breathe * 0.15 + e * this.pipExcitedAlpha);
 
       let cr1 = op[0], cg1 = op[1], cb1 = op[2];
       if (wave) {

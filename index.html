@@ -55,12 +55,20 @@
     </div>
     <script src="mesh-audio.js"></script>
     <script src="background.js"></script>
+    <script src="tuner.js"></script>
     <script src="layout.js"></script>
     <script src="animation.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", () => {
         const musicalMesh = new MusicalMesh();
         const background = new BackgroundField({ musicalMesh });
+        const tuneParam = (new URLSearchParams(location.search).get("tune") || "").toLowerCase();
+        if (tuneParam === "1") new Tuner(background, "halo");
+        else if (tuneParam === "2") new Tuner(background, "pip");
+        else if (tuneParam === "all" || tuneParam === "both" || tuneParam === "3") {
+          new Tuner(background, "halo");
+          new Tuner(background, "pip");
+        }
         const layout = new Layout();
         const animation = new Animation(layout);
         const instrumentSelector = new InstrumentSelector(musicalMesh);
