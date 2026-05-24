@@ -9,10 +9,30 @@
 // A click on one of the 7 invisible slots along the bottom edge changes
 // the active instrument timbre (clarinet, bass, piano, harpsichord, …).
 //
-// Browsers block AudioContext until a user gesture, so a small hint badge
-// invites the user to click. After the first click, audio is live.
+// Browsers block AudioContext until a user gesture. The page loads muted;
+// audio goes live only when the user clicks the sound toggle in the left
+// control bar (controls.js), which doubles as a breathing "click me" invite.
 
 class MusicalMesh {
+  // A small cross-cultural set of tonal systems. Float entries are
+  // microtonal (real-world Slendro and Maqam tunings aren't quantized
+  // to Western 12-TET); the MIDI→Hz formula handles non-integer values
+  // natively so they sound correct, not snapped.
+  static SCALES = [
+    { name: "Major Pent.",  notes: [0, 2, 4, 7, 9] },
+    { name: "Minor Pent.",  notes: [0, 3, 5, 7, 10] },
+    { name: "Diatonic Maj", notes: [0, 2, 4, 5, 7, 9, 11] },
+    { name: "Diatonic Min", notes: [0, 2, 3, 5, 7, 8, 10] },
+    { name: "Chromatic",    notes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
+    { name: "Whole Tone",   notes: [0, 2, 4, 6, 8, 10] },
+    { name: "Slendro",      notes: [0, 2.4, 4.8, 7.2, 9.6] },
+    { name: "Pelog",        notes: [0, 1, 3, 7, 8] },
+    { name: "Maqam Rast",   notes: [0, 2, 3.5, 5, 7, 9, 10.5] },
+    { name: "Hirajoshi",    notes: [0, 2, 3, 7, 8] },
+  ];
+
+  static KEY_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
   constructor() {
     this.audioCtx = null;
     this.master = null;
@@ -27,67 +47,71 @@ class MusicalMesh {
     this.excitementThreshold = 0.35;
     this.masterVolume = 0.10;
 
+    // Tunable audio properties surfaced for ?tune=sound. Setters
+    // (applyMasterVolume, applyFilterCutoff, applyFilterQ) push these
+    // into the live audio graph; start() reads them when first building
+    // the graph so changes made before audio is enabled also stick.
+    this.filterCutoff = 5000;
+    this.filterQ = 0.7;
+    // waveSpeed mirrors background.waveSpeed so the audio wave stays
+    // locked to the visual wave; syncWaveSpeed() writes through.
+    this.waveSpeed = 900;
+    this.background = null;
+    // Click-wave shape: how many notes/sec at most, and how soft the
+    // furthest dot's note is allowed to be.
+    this.waveNoteDensity = 40;
+    this.waveIntensityFloor = 0.12;
+
     // Global rate limit across all voices to prevent the audio graph from
     // ballooning when the cursor sweeps fast. ~33 new voices/sec maximum.
     this.minVoiceIntervalMs = 30;
     this.lastVoiceTime = 0;
 
-    // Pentatonic major scale — adjacent dots can only form consonant intervals.
-    // Two pentatonic octaves span the screen (10 slots), so there is enough
-    // melodic range without cramming semitones next to each other.
-    this.pentatonic = [0, 2, 4, 7, 9]; // semitone offsets: R, M2, M3, P5, M6
-    this.notesPerScreen = this.pentatonic.length * 2; // 10 slots = 2 octaves
+    // Tonal system, surfaced for ?tune=4. scaleIndex picks one of the
+    // presets in MusicalMesh.SCALES; setScale() copies the chosen array
+    // into this.scale, which noteForPosition reads each frame. Float
+    // entries in the array (e.g. Slendro, Maqam Rast) intentionally
+    // produce microtonal pitches.
+    this.scaleIndex = 0;
+    this.scale = MusicalMesh.SCALES[0].notes;
+    this.rootKey = 0; // 0=C, 1=C#, 2=D, ... 11=B — semitones added to every pitch
+    this.baseOctave = 6; // octave that plays at the top edge of the screen
+    this.octaveSpan = 5; // how many octaves span the screen height
+    this.notesPerScreen = 10; // horizontal note divisions
+    this.tuningA4 = 440; // reference frequency in Hz for note A4
+    this.toneStride = 1; // scale-degrees between adjacent x positions (0 = unison)
+    this.keyLocked = 0; // 1 = clicks no longer retune key/octave (0 = free)
 
     // Click-driven transposition: shifts the whole mesh up or down
     this.keyOffset = 0; // 0..11 semitones (X of click)
     this.octaveOffset = 0; // -1..+1 octaves (Y of click)
 
-    // Instrument voices — each is { name, voice(freq, intensity, time) }
-    this.instruments = [
-      { name: "Trumpet", voice: this.voiceTrumpet },
-      { name: "Bass Guitar", voice: this.voiceBass },
-      { name: "Piano", voice: this.voicePiano },
-      { name: "Harpsichord", voice: this.voiceHarpsichord },
-      { name: "Bell", voice: this.voiceBell },
-      { name: "Pad", voice: this.voicePad },
-      { name: "Pluck", voice: this.voicePluck },
-    ];
+    // Instrument voices come from instrument-mixes.js (loaded before this
+    // file). Each entry is { name, emoji, voice(freq, intensity, time) }.
+    // applyMix() (driven by the instrument tuner dial) swaps the whole
+    // array in place for a different curated timbre set.
+    this.currentMix = 0;
+    this.instruments = INSTRUMENT_MIXES[0].instruments;
     this.currentInstrument = 0;
-
-    this.hint = null;
-    this.showHint();
+    // Wired in index.html — fires when the active mix changes so the
+    // InstrumentSelector bar can re-skin its emoji/name labels.
+    this.onMixChange = null;
   }
 
-  showHint() {
-    const hint = document.createElement("div");
-    hint.id = "audio-hint";
-    hint.textContent = "🔊 click anywhere to enable sound";
-    Object.assign(hint.style, {
-      position: "fixed",
-      bottom: "80px",
-      right: "20px",
-      padding: "8px 14px",
-      background: "rgba(0,0,0,0.55)",
-      color: "#fff",
-      fontFamily: "Montserrat, sans-serif",
-      fontSize: "12px",
-      borderRadius: "20px",
-      zIndex: "100",
-      pointerEvents: "none",
-      transition: "opacity 0.6s",
-      opacity: "0.85",
-    });
-    document.body.appendChild(hint);
-    this.hint = hint;
-  }
-
-  hideHint() {
-    if (!this.hint) return;
-    this.hint.style.opacity = "0";
-    setTimeout(() => {
-      this.hint && this.hint.remove();
-      this.hint = null;
-    }, 600);
+  // Side-effect for the instrument tuner dial: reads currentMix and
+  // swaps the whole 7-voice array. The tuner just writes currentMix and
+  // calls applyMix() (see Tuner.SIDE_EFFECTS) — same pattern as setScale.
+  applyMix() {
+    const max = INSTRUMENT_MIXES.length - 1;
+    this.currentMix = Math.max(0, Math.min(max, Math.round(this.currentMix)));
+    this.instruments = INSTRUMENT_MIXES[this.currentMix].instruments;
+    if (this.currentInstrument >= this.instruments.length) {
+      this.currentInstrument = 0;
+    }
+    if (this.enabled && this.audioCtx) {
+      this.playVoice(261.63, 0.65, this.audioCtx.currentTime);
+    }
+    if (this.onMixChange) this.onMixChange(this.currentMix);
   }
 
   start() {
@@ -112,38 +136,74 @@ class MusicalMesh {
 
       this.filter = this.audioCtx.createBiquadFilter();
       this.filter.type = "lowpass";
-      this.filter.frequency.value = 5000;
-      this.filter.Q.value = 0.7;
+      this.filter.frequency.value = this.filterCutoff;
+      this.filter.Q.value = this.filterQ;
 
       this.master.connect(this.compressor);
       this.compressor.connect(this.filter);
       this.filter.connect(this.audioCtx.destination);
 
       this.enabled = true;
-      this.hideHint();
     } catch (err) {
       console.warn("Audio init failed:", err);
     }
+  }
+
+  // Side-effect setters called by the Tuner when a sound dial moves so
+  // the change is audible immediately (rather than waiting for the next
+  // voice to be scheduled).
+  applyMasterVolume() {
+    if (this.master) this.master.gain.value = this.masterVolume;
+  }
+
+  applyFilterCutoff() {
+    if (this.filter) this.filter.frequency.value = this.filterCutoff;
+  }
+
+  applyFilterQ() {
+    if (this.filter) this.filter.Q.value = this.filterQ;
+  }
+
+  // Keep the visual wave speed in sync with the audio wave speed so the
+  // sound's expansion stays glued to the ring on screen.
+  syncWaveSpeed() {
+    if (this.background) this.background.waveSpeed = this.waveSpeed;
+  }
+
+  // Look up the selected scale by index and copy its note array into
+  // this.scale so noteForPosition sees the new tuning on the next call.
+  setScale() {
+    const max = MusicalMesh.SCALES.length - 1;
+    const i = Math.max(0, Math.min(max, Math.round(this.scaleIndex)));
+    this.scale = MusicalMesh.SCALES[i].notes;
   }
 
   noteForPosition(x, y, w, h) {
     const xRatio = Math.max(0, Math.min(0.999, x / w));
     const yRatio = Math.max(0, Math.min(0.999, y / h));
     const noteIdx = Math.floor(xRatio * this.notesPerScreen);
-    // Map the slot to a pentatonic semitone, spanning multiple octaves left→right.
-    const pLen = this.pentatonic.length;
-    const semitone = this.pentatonic[noteIdx % pLen] + Math.floor(noteIdx / pLen) * 12;
-    const octave = 6 - Math.floor(yRatio * 5);
+    // toneStride multiplies the scale-degree index so adjacent dots can be
+    // spaced wider than a single scale step (0 = unison, 1 = neighbors,
+    // 2 = thirds, 3 = fifths, ...). Wrap through the scale, climbing one
+    // octave (12 semitones) each time the stepped index passes sLen.
+    const stepped = noteIdx * this.toneStride;
+    const sLen = this.scale.length;
+    const semitone = this.scale[((stepped % sLen) + sLen) % sLen] + Math.floor(stepped / sLen) * 12;
+    const octave = this.baseOctave - Math.floor(yRatio * this.octaveSpan);
     const midi =
-      12 * (octave + 1) + semitone + this.keyOffset + this.octaveOffset * 12;
-    return 440 * Math.pow(2, (midi - 69) / 12);
+      12 * (octave + 1) + semitone + this.keyOffset + this.octaveOffset * 12 + this.rootKey;
+    // Tunable A4 lets you switch to 432 Hz, 415 Hz (Baroque), etc.
+    return this.tuningA4 * Math.pow(2, (midi - 69) / 12);
   }
 
   setAnchor(x, y, w, h) {
     const xRatio = Math.max(0, Math.min(0.999, x / w));
     const yRatio = Math.max(0, Math.min(0.999, y / h));
-    this.keyOffset = Math.floor(xRatio * 12);
-    this.octaveOffset = 1 - Math.floor(yRatio * 3);
+    // 24 horizontal buckets (full chromatic wheel × 2) and 5 vertical
+    // buckets (octaveOffset ±2). Doubles the color/tone resolution from
+    // the original 12×3 while staying inside a musical pitch range.
+    this.keyOffset = Math.floor(xRatio * 24);
+    this.octaveOffset = 2 - Math.floor(yRatio * 5);
   }
 
   setInstrument(idx) {
@@ -166,185 +226,6 @@ class MusicalMesh {
     return true;
   }
 
-  // ============ INSTRUMENT VOICES ============
-  // Each takes (freq, intensity, time) and creates oscillator(s) + envelope.
-
-  // Trumpet: bright brass tone from full integer-harmonic additive synthesis
-  // with strong 2nd/3rd partials and a sharp attack for the brassy "blat".
-  voiceTrumpet(freq, intensity, time) {
-    const harmonics = [
-      { mult: 1, gain: 0.4 },
-      { mult: 2, gain: 0.5 },
-      { mult: 3, gain: 0.45 },
-      { mult: 4, gain: 0.3 },
-      { mult: 5, gain: 0.2 },
-      { mult: 6, gain: 0.1 },
-    ];
-    const env = this.audioCtx.createGain();
-    env.gain.setValueAtTime(0, time);
-    env.gain.linearRampToValueAtTime(0.42 * intensity, time + 0.025);
-    env.gain.linearRampToValueAtTime(0.32 * intensity, time + 0.35);
-    env.gain.exponentialRampToValueAtTime(0.001, time + 1.2);
-    env.connect(this.master);
-
-    for (const h of harmonics) {
-      const osc = this.audioCtx.createOscillator();
-      osc.type = "sine";
-      osc.frequency.value = freq * h.mult;
-      const g = this.audioCtx.createGain();
-      g.gain.value = h.gain;
-      osc.connect(g);
-      g.connect(env);
-      osc.start(time);
-      osc.stop(time + 1.5);
-    }
-  }
-
-  // Bass Guitar: sawtooth dropped 2 octaves with a plucky filter envelope
-  voiceBass(freq, intensity, time) {
-    const f = freq / 4;
-    const osc = this.audioCtx.createOscillator();
-    osc.type = "sawtooth";
-    osc.frequency.value = f;
-
-    const filter = this.audioCtx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.Q.value = 6;
-    filter.frequency.setValueAtTime(2200, time);
-    filter.frequency.exponentialRampToValueAtTime(400, time + 0.35);
-
-    const env = this.audioCtx.createGain();
-    env.gain.setValueAtTime(0, time);
-    env.gain.linearRampToValueAtTime(0.55 * intensity, time + 0.005);
-    env.gain.exponentialRampToValueAtTime(0.001, time + 1.0);
-
-    osc.connect(filter);
-    filter.connect(env);
-    env.connect(this.master);
-    osc.start(time);
-    osc.stop(time + 1.1);
-  }
-
-  // Piano: integer harmonics with hard attack and slow exponential decay
-  voicePiano(freq, intensity, time) {
-    const harmonics = [
-      { mult: 1, gain: 0.7 },
-      { mult: 2, gain: 0.32 },
-      { mult: 3, gain: 0.16 },
-      { mult: 4, gain: 0.08 },
-      { mult: 5, gain: 0.04 },
-    ];
-    const env = this.audioCtx.createGain();
-    env.gain.setValueAtTime(0, time);
-    env.gain.linearRampToValueAtTime(0.32 * intensity, time + 0.005);
-    env.gain.exponentialRampToValueAtTime(0.001, time + 2.0);
-    env.connect(this.master);
-
-    for (const h of harmonics) {
-      const osc = this.audioCtx.createOscillator();
-      osc.type = "sine";
-      osc.frequency.value = freq * h.mult;
-      const g = this.audioCtx.createGain();
-      g.gain.value = h.gain;
-      osc.connect(g);
-      g.connect(env);
-      osc.start(time);
-      osc.stop(time + 2.1);
-    }
-  }
-
-  // Harpsichord: sawtooth + highpass, extremely plucky envelope
-  voiceHarpsichord(freq, intensity, time) {
-    const osc = this.audioCtx.createOscillator();
-    osc.type = "sawtooth";
-    osc.frequency.value = freq;
-
-    const filter = this.audioCtx.createBiquadFilter();
-    filter.type = "highpass";
-    filter.frequency.value = freq * 1.5;
-
-    const env = this.audioCtx.createGain();
-    env.gain.setValueAtTime(0, time);
-    env.gain.linearRampToValueAtTime(0.35 * intensity, time + 0.002);
-    env.gain.exponentialRampToValueAtTime(0.001, time + 0.7);
-
-    osc.connect(filter);
-    filter.connect(env);
-    env.connect(this.master);
-    osc.start(time);
-    osc.stop(time + 0.8);
-  }
-
-  // Bell: inharmonic sine partials (ratios from real bell physics) with long decay
-  voiceBell(freq, intensity, time) {
-    const harmonics = [
-      { mult: 1, gain: 0.5 },
-      { mult: 2.0, gain: 0.25 },
-      { mult: 2.76, gain: 0.3 },
-      { mult: 5.4, gain: 0.15 },
-    ];
-    const env = this.audioCtx.createGain();
-    env.gain.setValueAtTime(0, time);
-    env.gain.linearRampToValueAtTime(0.30 * intensity, time + 0.005);
-    env.gain.exponentialRampToValueAtTime(0.001, time + 3.0);
-    env.connect(this.master);
-
-    for (const h of harmonics) {
-      const osc = this.audioCtx.createOscillator();
-      osc.type = "sine";
-      osc.frequency.value = freq * h.mult;
-      const g = this.audioCtx.createGain();
-      g.gain.value = h.gain;
-      osc.connect(g);
-      g.connect(env);
-      osc.start(time);
-      osc.stop(time + 3.1);
-    }
-  }
-
-  // Pad: 3 detuned sawtooths through lowpass — slow attack, long sustain
-  voicePad(freq, intensity, time) {
-    const detunes = [-9, 0, 9]; // cents
-    const filter = this.audioCtx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = 1400;
-
-    const env = this.audioCtx.createGain();
-    env.gain.setValueAtTime(0, time);
-    env.gain.linearRampToValueAtTime(0.18 * intensity, time + 0.35);
-    env.gain.exponentialRampToValueAtTime(0.001, time + 2.5);
-
-    filter.connect(env);
-    env.connect(this.master);
-
-    for (const d of detunes) {
-      const osc = this.audioCtx.createOscillator();
-      osc.type = "sawtooth";
-      osc.frequency.value = freq;
-      osc.detune.value = d;
-      osc.connect(filter);
-      osc.start(time);
-      osc.stop(time + 2.6);
-    }
-  }
-
-  // Pluck: triangle wave with very fast attack, quick release
-  voicePluck(freq, intensity, time) {
-    const osc = this.audioCtx.createOscillator();
-    osc.type = "triangle";
-    osc.frequency.value = freq;
-
-    const env = this.audioCtx.createGain();
-    env.gain.setValueAtTime(0, time);
-    env.gain.linearRampToValueAtTime(0.55 * intensity, time + 0.003);
-    env.gain.exponentialRampToValueAtTime(0.001, time + 0.55);
-
-    osc.connect(env);
-    env.connect(this.master);
-    osc.start(time);
-    osc.stop(time + 0.65);
-  }
-
   // ============ TRIGGERS ============
 
   // Hover-driven ping with cooldown
@@ -362,6 +243,56 @@ class MusicalMesh {
     if (!this.enabled || !this.audioCtx) return;
     this.cooldowns.set(dot, performance.now());
     this.playVoice(freq, intensity, this.audioCtx.currentTime + delay);
+  }
+
+  // Schedule a ripple of notes that emanates outward from (cx, cy) in sync
+  // with the visual bow-wave: each dot's pitch (from noteForPosition) fires
+  // when the wavefront reaches it (delay = dist / waveSpeed). Pitches come
+  // from the same pentatonic mapping used by hover, so the ripple is always
+  // in key. A minimum time gap thins dense rings to ~40 notes/sec; intensity
+  // falls off with distance so the wave audibly dies at the edges. Pending
+  // notes from a prior wave are cancelled so rapid clicks restart the
+  // ripple rather than stacking waves into a wall of sound.
+  waveTriggerAt(dots, cx, cy, w, h, waveSpeed = 900) {
+    if (!this.enabled || !this.audioCtx) return;
+
+    if (this._waveTimers && this._waveTimers.length) {
+      for (const id of this._waveTimers) clearTimeout(id);
+    }
+    this._waveTimers = [];
+
+    const maxDist = Math.sqrt(w * w + h * h);
+    const minGapSec = 1 / Math.max(1, this.waveNoteDensity);
+    const floor = this.waveIntensityFloor;
+
+    // Sort by distance so the gap filter thins evenly along the wave's
+    // expansion (closer dots commit their time slots first).
+    const ordered = new Array(dots.length);
+    for (let i = 0; i < dots.length; i++) {
+      const dot = dots[i];
+      const dx = dot.x - cx;
+      const dy = dot.y - cy;
+      ordered[i] = { dot, dist: Math.sqrt(dx * dx + dy * dy) };
+    }
+    ordered.sort((a, b) => a.dist - b.dist);
+
+    let lastDelay = -minGapSec;
+    for (const entry of ordered) {
+      const delaySec = entry.dist / waveSpeed;
+      if (delaySec - lastDelay < minGapSec) continue;
+      lastDelay = delaySec;
+      const freq = this.noteForPosition(entry.dot.x, entry.dot.y, w, h);
+      const intensity = Math.max(floor, 1 - entry.dist / maxDist);
+      const dot = entry.dot;
+      const id = setTimeout(() => {
+        // Direct voice call bypasses the cursor-sweep rate limit, which
+        // exists to throttle hover spam — click events should ring through.
+        const inst = this.instruments[this.currentInstrument];
+        inst.voice.call(this, freq, intensity, this.audioCtx.currentTime);
+        this.cooldowns.set(dot, performance.now());
+      }, delaySec * 1000);
+      this._waveTimers.push(id);
+    }
   }
 
   // Force-play a chord at a position (used on key-change clicks)
@@ -407,8 +338,6 @@ class InstrumentSelector {
     this.mesh = mesh;
     this.slots = [];
     this.emojiEls = [];
-    // One emoji per instrument, in the same order as mesh.instruments
-    this.emojis = ["🎺", "🎸", "🎹", "🎼", "🔔", "☁️", "🪕"];
     this.activeIndex = 0;
     this.labelEl = null;
     this.labelTimer = null;
@@ -444,9 +373,11 @@ class InstrumentSelector {
         alignItems: "center",
       });
 
-      // Emoji preview — fades in on hover, stays solid when slot is active
+      // Emoji preview — fades in on hover, stays solid when slot is active.
+      // Pulled from the instrument definition so refreshLabels() can re-skin
+      // the whole bar by calling refreshLabels().
       const emojiEl = document.createElement("div");
-      emojiEl.textContent = this.emojis[i] || "";
+      emojiEl.textContent = inst.emoji || "";
       Object.assign(emojiEl.style, {
         fontSize: "32px",
         lineHeight: "1",
@@ -468,8 +399,10 @@ class InstrumentSelector {
         }
       });
       slot.addEventListener("click", () => {
-        // Ensure audio is up — this click counts as the user gesture
-        this.mesh.start();
+        // Resume audio only if the user already enabled it. Picking an
+        // instrument never unmutes the page — that's the sound toggle's
+        // job — so the site can load and stay muted until asked.
+        if (this.mesh.enabled) this.mesh.start();
         this.select(i);
       });
       bar.appendChild(slot);
@@ -530,5 +463,21 @@ class InstrumentSelector {
     this.labelTimer = setTimeout(() => {
       if (this.labelEl) this.labelEl.style.opacity = "0";
     }, 1500);
+  }
+
+  // Re-skin every slot's emoji + tooltip from the current mesh.instruments
+  // array. Called after MusicalMesh.applyMix() swaps the instrument set so
+  // the bottom bar reflects the new mix's emojis and instrument names.
+  refreshLabels() {
+    this.mesh.instruments.forEach((inst, i) => {
+      if (this.emojiEls[i]) this.emojiEls[i].textContent = inst.emoji || "";
+      if (this.slots[i]) this.slots[i].dataset.name = inst.name;
+    });
+    // Reapply highlight (which voice is currently active in the new mix)
+    if (this.activeIndex >= this.mesh.instruments.length) this.activeIndex = 0;
+    this.markActive(this.activeIndex);
+    // Announce the new active instrument briefly
+    const active = this.mesh.instruments[this.activeIndex];
+    if (active) this.showLabel(active.name);
   }
 }

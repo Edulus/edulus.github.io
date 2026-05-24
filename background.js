@@ -48,6 +48,17 @@ class BackgroundField {
     this.pipRestAlpha = 1.0;
     this.pipExcitedAlpha = 1.0;
 
+    // Color formula dials, surfaced for ?tune=5. These were previously
+    // magic constants inside setKeyColor; computeHaloColor/computePipColor
+    // read from these so the Tuner can adjust the palette live.
+    this.colorStartHue = 315;     // where the wheel starts at keyOffset 0
+    this.colorHueStep = 15;       // degrees rotated per horizontal click step
+    this.haloSaturation = 88;     // 0..100
+    this.haloBaseLightness = 62;  // 0..100
+    this.lightnessStep = 8;       // lightness shift per vertical click step
+    this.pipSaturation = 86;      // 0..100
+    this.pipLightness = 64;       // 0..100
+
     // Colors lifted from the original CSS palette.
     // Both layers shift on grid clicks to mirror the musical key/octave change.
     // The shift is propagated as an outward wavefront from the click point
@@ -132,6 +143,38 @@ class BackgroundField {
     const w = window.innerWidth;
     const h = window.innerHeight;
     this.pinkDots = this.makeGrid(w, h, this.pinkSpacing, 0);
+  }
+
+  // Color formula helpers — single source of truth for how a halo/pip
+  // color is derived from the key/octave offsets and the tunable
+  // formula parameters. Used by setKeyColor (for the wave-driven path)
+  // and by recomputeColors (for the live tuner path).
+  computeHaloColor(keyOffset, octaveOffset) {
+    const hue = (this.colorStartHue + keyOffset * this.colorHueStep) % 360;
+    const lightness = this.haloBaseLightness + octaveOffset * this.lightnessStep;
+    return this.hslToRgb(hue, this.haloSaturation, lightness);
+  }
+
+  computePipColor(keyOffset) {
+    const hue = (this.colorStartHue + keyOffset * this.colorHueStep) % 360;
+    return this.hslToRgb((hue + this.pipHueOffset) % 360, this.pipSaturation, this.pipLightness);
+  }
+
+  // Called by the Tuner when any color-formula dial changes. Re-derives
+  // every cached color from scratch using the current key state on the
+  // linked mesh, snaps the live wave (if any) to its target, and rebuilds
+  // both halo sprites so the change is visible the next frame.
+  recomputeColors() {
+    const ko = this.musicalMesh ? this.musicalMesh.keyOffset : 0;
+    const oo = this.musicalMesh ? this.musicalMesh.octaveOffset : 0;
+    this.targetCyanColor = this.computeHaloColor(ko, oo);
+    this.targetPinkColor = this.computePipColor(ko);
+    this.cyanColor = this.targetCyanColor.slice();
+    this.pinkColor = this.targetPinkColor.slice();
+    this.haloSprite = this.buildHaloSprite(this.cyanColor);
+    this.targetHaloSprite = this.haloSprite;
+    this.haloSpriteRadius = this.haloSprite.width / 2;
+    this.wave = null;
   }
 
   // After pipHueOffset changes, recompute both current and target pip colors
@@ -255,16 +298,12 @@ class BackgroundField {
       this.wave = null;
     }
 
-    // Start at pink (~315°) and walk forward 30°/semitone so consecutive
-    // keys land on adjacent iridescent bands: pink → peach → soft yellow →
-    // mint → cyan → lavender → back to pink.
-    const hue = (315 + keyOffset * 30) % 360;
-    const lightness = 62 + octaveOffset * 8;
-    this.targetCyanColor = this.hslToRgb(hue, 88, lightness);
-    // Pip layer hue is offset from the halo by this.pipHueOffset degrees on
-    // the same iridescent ring. Default 180° = true complement (so the small
-    // dots always read as a distinct accent against the halo color).
-    this.targetPinkColor = this.hslToRgb((hue + this.pipHueOffset) % 360, 86, 64);
+    // All color math now lives in computeHaloColor/computePipColor so
+    // the tunable formula params (colorStartHue, colorHueStep, halo
+    // saturation/lightness, lightness step, pip saturation/lightness)
+    // are honored by both wave-driven and tuner-driven color changes.
+    this.targetCyanColor = this.computeHaloColor(keyOffset, octaveOffset);
+    this.targetPinkColor = this.computePipColor(keyOffset);
     this.targetHaloSprite = this.buildHaloSprite(this.targetCyanColor);
 
     if (originX !== undefined && originY !== undefined) {

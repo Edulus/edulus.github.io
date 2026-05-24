@@ -70,3 +70,15 @@ img {
   opacity: 1;
   transform: translateX(-50%) translateY(10px);
 }
+
+/* Gentle "breathing" pulse for the left-bar sound toggle while the page
+   is muted — fades the icon in and out to invite a click. See controls.js. */
+@keyframes controlPulse {
+  0%,
+  100% {
+    opacity: 0.18;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
