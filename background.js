@@ -257,6 +257,33 @@ class BackgroundField {
     }
   }
 
+  // Sequencer's visual feedback hook. Lights up both layers at a smaller
+  // radius than flashAt and without the pink boost, so each sequenced note
+  // shows as a soft pulse rather than the large bow-wave a click produces.
+  exciteAt(x, y, radius = 120) {
+    const rSq = radius * radius;
+    for (let i = 0; i < this.cyanDots.length; i++) {
+      const d = this.cyanDots[i];
+      const dx = d.x - x;
+      const dy = d.y - y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < rSq) {
+        const intensity = 1 - Math.sqrt(distSq) / radius;
+        if (intensity > d.excitement) d.excitement = intensity;
+      }
+    }
+    for (let i = 0; i < this.pinkDots.length; i++) {
+      const d = this.pinkDots[i];
+      const dx = d.x - x;
+      const dy = d.y - y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < rSq) {
+        const intensity = 1 - Math.sqrt(distSq) / radius;
+        if (intensity > d.excitement) d.excitement = intensity;
+      }
+    }
+  }
+
   decayDots(dots, factor) {
     for (let i = 0; i < dots.length; i++) {
       dots[i].excitement *= factor;

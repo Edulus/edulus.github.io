@@ -14,6 +14,7 @@ class Tuner {
     halo: {
       title: "Halo dials",
       accent: "#08b1f3",
+      side: "right",
       description:
         "The large glowing dot that tracks your cursor. Adjust how concentrated the kernel is, how long the trail lingers behind the cursor, the shape of the falloff, and how each individual dot's halo is rendered.",
       dials: [
@@ -35,6 +36,7 @@ class Tuner {
     pip: {
       title: "Pip dials",
       accent: "#f03c9f",
+      side: "right",
       description:
         "The smaller satellite dots scattered between halos. Adjust their density across the screen, how strongly they react to the cursor, their resting size and opacity, and their color relative to the halos.",
       dials: [
@@ -80,6 +82,7 @@ class Tuner {
     color: {
       title: "Color dials",
       accent: "#ff7a59",
+      side: "right",
       description:
         "The palette and how it shifts with clicks. Adjust where the color wheel starts, how fast colors rotate as you click horizontally, how brightness shifts vertically, and the saturation/lightness of the halo and pip layers.",
       dials: [
@@ -203,20 +206,26 @@ class Tuner {
     panel.className = "tuner-panel";
     panel.dataset.set = this.setKey;
 
-    // Positioned to clear the 60px-wide left ControlBar (+20px gap).
-    // Only one tuner is ever visible at a time (the bar enforces this),
-    // so no stacking logic is needed.
+    // Positioned to clear the 60px-wide ControlBar (+20px gap). Audio
+    // panels live on the left, visual panels on the right (set via
+    // SETS[setKey].side). The accent stripe sits on the edge nearest
+    // the bar so it reads as the panel's "spine". Only one panel is
+    // ever visible at a time (the bars enforce this), so no stacking
+    // logic is needed.
+    const side = this.config.side === "right" ? "right" : "left";
+    const edgeStyles = side === "right"
+      ? ["right:80px", `border-right:3px solid ${this.config.accent}`]
+      : ["left:80px",  `border-left:3px solid ${this.config.accent}`];
     panel.style.cssText = [
       "position:fixed",
       "top:12px",
-      "left:80px",
+      ...edgeStyles,
       "z-index:9999",
       "background:rgba(18,20,28,0.88)",
       "color:#fff",
       "font:12px/1.4 Montserrat,sans-serif",
       "padding:12px 14px 10px",
       "border-radius:8px",
-      `border-left:3px solid ${this.config.accent}`,
       "min-width:240px",
       "box-shadow:0 6px 24px rgba(0,0,0,0.45)",
       "backdrop-filter:blur(8px)",
@@ -471,9 +480,16 @@ class Tuner {
   attachTooltip(host, text, anchor) {
     const t = document.createElement("div");
     t.textContent = text;
+    // On right-side panels the "right" anchor would push tooltips off the
+    // edge of the screen; flip to the left of the host in that case so the
+    // dial-row tooltip stays on-screen.
+    const onRightPanel = this.config.side === "right";
     const pos = anchor === "right"
-      ? "top:0;left:calc(100% + 12px)"
+      ? (onRightPanel ? "top:0;right:calc(100% + 12px)" : "top:0;left:calc(100% + 12px)")
       : "top:calc(100% + 6px);left:0";
+    const accentEdge = (anchor === "right" && onRightPanel)
+      ? `border-right:2px solid ${this.config.accent}`
+      : `border-left:2px solid ${this.config.accent}`;
     t.style.cssText = [
       "position:absolute",
       pos,
@@ -486,7 +502,7 @@ class Tuner {
       "line-height:1.45",
       "letter-spacing:0",
       "text-transform:none",
-      `border-left:2px solid ${this.config.accent}`,
+      accentEdge,
       "border-radius:6px",
       "opacity:0",
       "pointer-events:none",

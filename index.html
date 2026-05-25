@@ -58,6 +58,7 @@
     <script src="background.js"></script>
     <script src="tuner.js"></script>
     <script src="controls.js"></script>
+    <script src="seed-music.js"></script>
     <script src="layout.js"></script>
     <script src="animation.js"></script>
     <script>
@@ -71,8 +72,12 @@
         musicalMesh.background = background;
         musicalMesh.waveSpeed = background.waveSpeed;
 
+        // Seed-music panel is registered alongside the tuners so the
+        // ControlBar's "only one panel open" rule applies to it too.
+        const seedSequencer = new SeedSequencer(musicalMesh, background);
+
         // Tuner panels are always instantiated (hidden by default) so the
-        // ControlBar can toggle them. URL ?tune=1 / ?tune=2 / ?tune=3
+        // ControlBars can toggle them. URL ?tune=1 / ?tune=2 / ?tune=3
         // still works as a deep-link to a specific panel.
         const tuners = {
           halo:       new Tuner(background, "halo"),
@@ -81,6 +86,7 @@
           tonal:      new Tuner(musicalMesh, "tonal"),
           color:      new Tuner(background, "color"),
           instrument: new Tuner(musicalMesh, "instrument"),
+          seed:       seedSequencer,
         };
         const tuneParam = (new URLSearchParams(location.search).get("tune") || "").toLowerCase();
         if (tuneParam === "1") tuners.halo.show();
@@ -89,6 +95,7 @@
         else if (tuneParam === "4") tuners.tonal.show();
         else if (tuneParam === "5") tuners.color.show();
         else if (tuneParam === "6") tuners.instrument.show();
+        else if (tuneParam === "7") tuners.seed.show();
 
         const instrumentSelector = new InstrumentSelector(musicalMesh);
 
@@ -97,7 +104,15 @@
         // its emojis and names to match the new mix.
         musicalMesh.onMixChange = () => instrumentSelector.refreshLabels();
 
-        const controlBar = new ControlBar({ mesh: musicalMesh, tuners });
+        // Two bars: audio controls hug the left edge, visual controls
+        // hug the right edge. They share the same tuners dict so closing
+        // a panel on one side propagates to the other.
+        const leftBar  = new ControlBar({ mesh: musicalMesh, tuners, side: "left" });
+        const rightBar = new ControlBar({ mesh: musicalMesh, tuners, side: "right" });
+
+        // Keep the 🌱 slot lit while the sequencer is running so the user
+        // can find the stop control after closing the panel.
+        seedSequencer.onPlayingChange = () => ControlBar.refreshAll();
 
         const layout = new Layout();
         const animation = new Animation(layout);

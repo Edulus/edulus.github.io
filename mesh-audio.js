@@ -67,6 +67,10 @@ class MusicalMesh {
     this.minVoiceIntervalMs = 30;
     this.lastVoiceTime = 0;
 
+    // When the SeedSequencer is running, cursor pings duck to keep the
+    // sequenced melody in the foreground. See ping() and sequencerPlay().
+    this.sequencerActive = false;
+
     // Tonal system, surfaced for ?tune=4. scaleIndex picks one of the
     // presets in MusicalMesh.SCALES; setScale() copies the chosen array
     // into this.scale, which noteForPosition reads each frame. Float
@@ -196,6 +200,30 @@ class MusicalMesh {
     return this.tuningA4 * Math.pow(2, (midi - 69) / 12);
   }
 
+  // Same MIDI math as noteForPosition, but indexed by discrete slot/band
+  // so the sequencer doesn't need to fabricate pixel coordinates. slotIndex
+  // mirrors `floor(xRatio * notesPerScreen)`; octaveBand mirrors
+  // `floor(yRatio * octaveSpan)` (0 = top/high, octaveSpan-1 = bottom/low).
+  noteForSlot(slotIndex, octaveBand) {
+    const stepped = slotIndex * this.toneStride;
+    const sLen = this.scale.length;
+    const semitone = this.scale[((stepped % sLen) + sLen) % sLen] + Math.floor(stepped / sLen) * 12;
+    const octave = this.baseOctave - octaveBand;
+    const midi =
+      12 * (octave + 1) + semitone + this.keyOffset + this.octaveOffset * 12 + this.rootKey;
+    return this.tuningA4 * Math.pow(2, (midi - 69) / 12);
+  }
+
+  // Sequencer voice path — bypasses the cursor-sweep rate limiter so the
+  // tempo grid is never thinned. Routes through the same instrument voice
+  // (so timbre switches mid-playback) and master/compressor/filter chain.
+  sequencerPlay(freq, intensity, when) {
+    if (!this.enabled || !this.audioCtx) return;
+    const t = (typeof when === "number") ? when : this.audioCtx.currentTime;
+    const inst = this.instruments[this.currentInstrument];
+    inst.voice.call(this, freq, intensity, t);
+  }
+
   setAnchor(x, y, w, h) {
     const xRatio = Math.max(0, Math.min(0.999, x / w));
     const yRatio = Math.max(0, Math.min(0.999, y / h));
@@ -231,6 +259,9 @@ class MusicalMesh {
   // Hover-driven ping with cooldown
   ping(dot, freq) {
     if (!this.enabled || !this.audioCtx) return;
+    // Silence cursor voices entirely while the seeded melody is playing —
+    // the dot field still lights up via the cursor, only its audio is muted.
+    if (this.sequencerActive) return;
     const nowMs = performance.now();
     const last = this.cooldowns.get(dot) || 0;
     if (nowMs - last < this.cooldownMs) return;
@@ -373,11 +404,10 @@ class InstrumentSelector {
         alignItems: "center",
       });
 
-      // Emoji preview — fades in on hover, stays solid when slot is active.
-      // Pulled from the instrument definition so refreshLabels() can re-skin
-      // the whole bar by calling refreshLabels().
+      // Icon preview — fades in on hover, stays solid when slot is active.
+      // Renders inst.iconUrl as an <img> when present, otherwise inst.emoji
+      // as text. refreshLabels() re-runs this when the mix changes.
       const emojiEl = document.createElement("div");
-      emojiEl.textContent = inst.emoji || "";
       Object.assign(emojiEl.style, {
         fontSize: "32px",
         lineHeight: "1",
@@ -385,11 +415,17 @@ class InstrumentSelector {
         transition: "opacity 0.3s",
         pointerEvents: "none",
       });
+      InstrumentSelector.renderIcon(emojiEl, inst);
       slot.appendChild(emojiEl);
 
       slot.addEventListener("mouseenter", () => {
         slot.style.backgroundColor = "rgba(255,255,255,0.04)";
         emojiEl.style.opacity = "0.85";
+        // Live name readout — reuses the same floating label that click
+        // and mix-change announcements use. Rapid hover across the bar
+        // updates the text in place; the 1.5s auto-hide takes care of
+        // clearing the label once the cursor leaves.
+        this.showLabel(this.mesh.instruments[i].name);
       });
       slot.addEventListener("mouseleave", () => {
         // Active slot keeps the white tint as its persistent indicator
@@ -465,12 +501,12 @@ class InstrumentSelector {
     }, 1500);
   }
 
-  // Re-skin every slot's emoji + tooltip from the current mesh.instruments
+  // Re-skin every slot's icon + tooltip from the current mesh.instruments
   // array. Called after MusicalMesh.applyMix() swaps the instrument set so
-  // the bottom bar reflects the new mix's emojis and instrument names.
+  // the bottom bar reflects the new mix's icons and instrument names.
   refreshLabels() {
     this.mesh.instruments.forEach((inst, i) => {
-      if (this.emojiEls[i]) this.emojiEls[i].textContent = inst.emoji || "";
+      if (this.emojiEls[i]) InstrumentSelector.renderIcon(this.emojiEls[i], inst);
       if (this.slots[i]) this.slots[i].dataset.name = inst.name;
     });
     // Reapply highlight (which voice is currently active in the new mix)
@@ -479,5 +515,22 @@ class InstrumentSelector {
     // Announce the new active instrument briefly
     const active = this.mesh.instruments[this.activeIndex];
     if (active) this.showLabel(active.name);
+  }
+
+  // Populate a slot's icon container. iconUrl wins over emoji so instruments
+  // whose glyph doesn't render reliably (Unicode 13 emoji on older Windows
+  // fonts) can supply a local image instead.
+  static renderIcon(el, inst) {
+    el.textContent = "";
+    if (inst.iconUrl) {
+      const img = document.createElement("img");
+      img.src = inst.iconUrl;
+      img.alt = inst.name || "";
+      img.style.cssText =
+        "width:36px;height:36px;display:block;object-fit:contain;pointer-events:none";
+      el.appendChild(img);
+    } else {
+      el.textContent = inst.emoji || "";
+    }
   }
 }
