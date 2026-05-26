@@ -1062,7 +1062,7 @@ const INSTRUMENT_MIXES = [
     emoji: "🌌",
     instruments: [
       { name: "Sub Bass",    emoji: "🐟", voice: voiceSubBass },
-      { name: "Saw Lead",    emoji: "🪚", voice: voiceSawLead },
+      { name: "Saw Lead",    emoji: "🪚", iconUrl: "icons/saw.png", voice: voiceSawLead },
       { name: "Square Lead", emoji: "◽", voice: voiceSquareLead },
       { name: "FM Bell",     emoji: "🛎️", voice: voiceFMBell },
       { name: "Chime",       emoji: "💫", voice: voiceChime },

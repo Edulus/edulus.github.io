@@ -217,11 +217,36 @@ class MusicalMesh {
   // Sequencer voice path — bypasses the cursor-sweep rate limiter so the
   // tempo grid is never thinned. Routes through the same instrument voice
   // (so timbre switches mid-playback) and master/compressor/filter chain.
-  sequencerPlay(freq, intensity, when) {
+  //
+  // sustainSec (optional): truncate the voice's natural tail by routing
+  // it through a per-note gain that holds at unity until `t + sustainSec`,
+  // then releases over ~50ms. The voice still draws its own attack
+  // envelope; we only gate the tail. Voices wire to `this.master` during
+  // the call, so we temporarily swap master for a per-note gate that
+  // feeds master — when the voice returns, master is restored. Long
+  // sustainSec values (longer than the voice's own envelope) are
+  // effectively no-ops.
+  sequencerPlay(freq, intensity, when, sustainSec) {
     if (!this.enabled || !this.audioCtx) return;
-    const t = (typeof when === "number") ? when : this.audioCtx.currentTime;
+    const ctx = this.audioCtx;
+    const t = (typeof when === "number") ? when : ctx.currentTime;
     const inst = this.instruments[this.currentInstrument];
-    inst.voice.call(this, freq, intensity, t);
+    if (typeof sustainSec !== "number" || sustainSec <= 0) {
+      inst.voice.call(this, freq, intensity, t);
+      return;
+    }
+    const gate = ctx.createGain();
+    gate.gain.setValueAtTime(1, t);
+    gate.connect(this.master);
+    const realMaster = this.master;
+    this.master = gate;
+    try {
+      inst.voice.call(this, freq, intensity, t);
+    } finally {
+      this.master = realMaster;
+    }
+    gate.gain.setValueAtTime(1, t + sustainSec);
+    gate.gain.exponentialRampToValueAtTime(0.001, t + sustainSec + 0.05);
   }
 
   setAnchor(x, y, w, h) {
@@ -370,8 +395,7 @@ class InstrumentSelector {
     this.slots = [];
     this.emojiEls = [];
     this.activeIndex = 0;
-    this.labelEl = null;
-    this.labelTimer = null;
+    this.tooltipEls = [];
     this.build();
     // Highlight the default starting instrument
     this.markActive(0);
@@ -402,7 +426,34 @@ class InstrumentSelector {
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
+        position: "relative",
       });
+
+      // Per-slot hover tooltip. Bottom edge sits 70px above the viewport
+      // bottom — the slot bar is 60px tall, so 10px above the slot top.
+      const tooltip = document.createElement("div");
+      tooltip.className = "instrument-tooltip";
+      tooltip.textContent = inst.name;
+      Object.assign(tooltip.style, {
+        position: "absolute",
+        bottom: "calc(100% + 10px)",
+        left: "50%",
+        transform: "translateX(-50%)",
+        padding: "5px 12px",
+        background: "rgba(0,0,0,0.6)",
+        color: "#fff",
+        fontFamily: "Montserrat, sans-serif",
+        fontSize: "12px",
+        letterSpacing: "1px",
+        textTransform: "uppercase",
+        borderRadius: "14px",
+        whiteSpace: "nowrap",
+        pointerEvents: "none",
+        opacity: "0",
+        transition: "opacity 0.25s",
+        zIndex: "22",
+      });
+      slot.appendChild(tooltip);
 
       // Icon preview — fades in on hover, stays solid when slot is active.
       // Renders inst.iconUrl as an <img> when present, otherwise inst.emoji
@@ -421,13 +472,13 @@ class InstrumentSelector {
       slot.addEventListener("mouseenter", () => {
         slot.style.backgroundColor = "rgba(255,255,255,0.04)";
         emojiEl.style.opacity = "0.85";
-        // Live name readout — reuses the same floating label that click
-        // and mix-change announcements use. Rapid hover across the bar
-        // updates the text in place; the 1.5s auto-hide takes care of
-        // clearing the label once the cursor leaves.
-        this.showLabel(this.mesh.instruments[i].name);
+        // Per-slot tooltip preview. The bottom-center label is reserved
+        // for the active instrument and is left alone on hover so it
+        // never gets replaced or covered.
+        tooltip.style.opacity = "0.92";
       });
       slot.addEventListener("mouseleave", () => {
+        tooltip.style.opacity = "0";
         // Active slot keeps the white tint as its persistent indicator
         if (i !== this.activeIndex) {
           slot.style.backgroundColor = "transparent";
@@ -444,39 +495,16 @@ class InstrumentSelector {
       bar.appendChild(slot);
       this.slots.push(slot);
       this.emojiEls.push(emojiEl);
+      this.tooltipEls.push(tooltip);
     });
 
     document.body.appendChild(bar);
-
-    // Floating label, briefly shown when instrument changes
-    const label = document.createElement("div");
-    Object.assign(label.style, {
-      position: "fixed",
-      bottom: "70px",
-      left: "50%",
-      transform: "translateX(-50%)",
-      padding: "6px 14px",
-      background: "rgba(0,0,0,0.6)",
-      color: "#fff",
-      fontFamily: "Montserrat, sans-serif",
-      fontSize: "13px",
-      letterSpacing: "1px",
-      textTransform: "uppercase",
-      borderRadius: "16px",
-      pointerEvents: "none",
-      zIndex: "21",
-      opacity: "0",
-      transition: "opacity 0.4s",
-    });
-    document.body.appendChild(label);
-    this.labelEl = label;
   }
 
   select(idx) {
     this.activeIndex = idx;
     this.mesh.setInstrument(idx);
     this.markActive(idx);
-    this.showLabel(this.mesh.instruments[idx].name);
   }
 
   markActive(idx) {
@@ -491,16 +519,6 @@ class InstrumentSelector {
     });
   }
 
-  showLabel(text) {
-    if (!this.labelEl) return;
-    this.labelEl.textContent = text;
-    this.labelEl.style.opacity = "0.92";
-    clearTimeout(this.labelTimer);
-    this.labelTimer = setTimeout(() => {
-      if (this.labelEl) this.labelEl.style.opacity = "0";
-    }, 1500);
-  }
-
   // Re-skin every slot's icon + tooltip from the current mesh.instruments
   // array. Called after MusicalMesh.applyMix() swaps the instrument set so
   // the bottom bar reflects the new mix's icons and instrument names.
@@ -508,13 +526,11 @@ class InstrumentSelector {
     this.mesh.instruments.forEach((inst, i) => {
       if (this.emojiEls[i]) InstrumentSelector.renderIcon(this.emojiEls[i], inst);
       if (this.slots[i]) this.slots[i].dataset.name = inst.name;
+      if (this.tooltipEls[i]) this.tooltipEls[i].textContent = inst.name;
     });
     // Reapply highlight (which voice is currently active in the new mix)
     if (this.activeIndex >= this.mesh.instruments.length) this.activeIndex = 0;
     this.markActive(this.activeIndex);
-    // Announce the new active instrument briefly
-    const active = this.mesh.instruments[this.activeIndex];
-    if (active) this.showLabel(active.name);
   }
 
   // Populate a slot's icon container. iconUrl wins over emoji so instruments

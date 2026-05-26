@@ -45,7 +45,7 @@ class BackgroundField {
     this.pipResponse = 0.75;
     this.pipRestSize = 1.3;
     this.pipExcitedSize = 4.2;
-    this.pipRestAlpha = 1.0;
+    this.pipRestAlpha = 0.7;
     this.pipExcitedAlpha = 1.0;
 
     // Color formula dials, surfaced for ?tune=5. These were previously
@@ -367,9 +367,11 @@ class BackgroundField {
     const r = this.influenceRadius;
     const rSq = r * r;
 
-    // 3-second breath cycle, value in [0, 1]
+    // 3-second breath cycle, value in [0, 1]. The pip layer uses the inverse
+    // so the two grids breathe in counter-phase — when halos swell, pips ebb.
     const t = (performance.now() - this.startTime) / 1000;
     const breathe = (Math.sin(t * 2.094) + 1) / 2;
+    const counterBreathe = 1 - breathe;
 
     // Wavefront state for this frame. waveRadius grows linearly from the
     // click point; per-dot progress p = clamp((waveRadius - dist)/band, 0, 1)
@@ -501,8 +503,8 @@ class BackgroundField {
       // Pips weakly respond to the pointer (pipResponse, default 0.15) but
       // fully to the wavefront — so the bow wave reads strongly on them.
       const e = d.excitement * this.pipResponse + waveGlow;
-      const size = this.pipRestSize + breathe * 0.3 + e * this.pipExcitedSize;
-      const alpha = Math.min(1, this.pipRestAlpha + breathe * 0.15 + e * this.pipExcitedAlpha);
+      const size = this.pipRestSize + counterBreathe * 0.3 + e * this.pipExcitedSize;
+      const alpha = Math.min(1, this.pipRestAlpha + counterBreathe * 0.15 + e * this.pipExcitedAlpha);
 
       let cr1 = op[0], cg1 = op[1], cb1 = op[2];
       if (wave) {
