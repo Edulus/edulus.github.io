@@ -33,6 +33,9 @@ class ControlBar {
           // as active, and pulseWhenActive makes it breathe in and out
           // to invite the first click — the page loads muted.
           emoji: () => (this.mesh.enabled ? "🔇" : "🔊"),
+          // Label follows the icon's meaning: invites sound while muted,
+          // offers mute once sound is on.
+          label: () => (this.mesh.enabled ? "Mute" : "Turn on sound"),
           isActive: () => !this.mesh.enabled,
           pulseWhenActive: true,
           onClick: () => this.toggleMute(),
@@ -40,24 +43,28 @@ class ControlBar {
         {
           id: "sound",
           emoji: () => "🎚️",
+          label: () => "Sound tuner",
           isActive: () => !!(this.tuners.sound && this.tuners.sound.isVisible()),
           onClick: () => this.openTuner("sound"),
         },
         {
           id: "tonal",
           emoji: () => "🎶",
+          label: () => "Scale & key",
           isActive: () => !!(this.tuners.tonal && this.tuners.tonal.isVisible()),
           onClick: () => this.openTuner("tonal"),
         },
         {
           id: "instrument",
           emoji: () => "🎻",
+          label: () => "Instrument",
           isActive: () => !!(this.tuners.instrument && this.tuners.instrument.isVisible()),
           onClick: () => this.openTuner("instrument"),
         },
         {
           id: "seed",
           emoji: () => "🌱",
+          label: () => "Seed music",
           // Stay lit whenever the panel is open OR the melody is playing
           // — mirrors the InstrumentSelector's behavior of keeping the
           // active instrument's emoji visible, so the user can find the
@@ -72,18 +79,21 @@ class ControlBar {
         {
           id: "halo",
           emoji: () => "☄️",
+          label: () => "Halo tuner",
           isActive: () => !!(this.tuners.halo && this.tuners.halo.isVisible()),
           onClick: () => this.openTuner("halo"),
         },
         {
           id: "pip",
           emoji: () => "🟣",
+          label: () => "Pip tuner",
           isActive: () => !!(this.tuners.pip && this.tuners.pip.isVisible()),
           onClick: () => this.openTuner("pip"),
         },
         {
           id: "color",
           emoji: () => "🎨",
+          label: () => "Dot color",
           isActive: () => !!(this.tuners.color && this.tuners.color.isVisible()),
           onClick: () => this.openTuner("color"),
         },
@@ -122,6 +132,8 @@ class ControlBar {
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
+        // Anchor for the absolutely-positioned hover tooltip.
+        position: "relative",
       });
 
       const emojiEl = document.createElement("div");
@@ -134,6 +146,36 @@ class ControlBar {
       });
       slot.appendChild(emojiEl);
 
+      // Hover tooltip — mirrors the bottom InstrumentSelector's style so
+      // all three bars feel the same. It sits on the inner side of the
+      // bar (left bar → to the right of the slot, right bar → to the left)
+      // so a slot near the screen edge never pushes the label off-screen.
+      const tooltip = document.createElement("div");
+      tooltip.className = "control-tooltip";
+      const innerSide = this.side === "right"
+        ? { right: "calc(100% + 8px)" }
+        : { left: "calc(100% + 8px)" };
+      Object.assign(tooltip.style, {
+        position: "absolute",
+        top: "50%",
+        transform: "translateY(-50%)",
+        padding: "5px 12px",
+        background: "rgba(0,0,0,0.6)",
+        color: "#fff",
+        fontFamily: "Montserrat, sans-serif",
+        fontSize: "12px",
+        letterSpacing: "1px",
+        textTransform: "uppercase",
+        borderRadius: "14px",
+        whiteSpace: "nowrap",
+        pointerEvents: "none",
+        opacity: "0",
+        transition: "opacity 0.25s",
+        zIndex: "22",
+        ...innerSide,
+      });
+      slot.appendChild(tooltip);
+
       if (ctrl.onClick) {
         slot.addEventListener("mouseenter", () => {
           slot.style.backgroundColor = "rgba(255,255,255,0.04)";
@@ -142,8 +184,13 @@ class ControlBar {
           emojiEl.style.animation = "none";
           emojiEl.style.opacity = "0.85";
           emojiEl.textContent = ctrl.emoji();
+          // Label is read fresh so state-dependent text (mute vs. turn on
+          // sound) is correct each time.
+          tooltip.textContent = ctrl.label ? ctrl.label() : "";
+          tooltip.style.opacity = "0.92";
         });
         slot.addEventListener("mouseleave", () => {
+          tooltip.style.opacity = "0";
           this.applyActiveState(slot, emojiEl, ctrl);
         });
         slot.addEventListener("click", (e) => {

@@ -17,7 +17,7 @@ Scripts are loaded as plain `<script>` tags from [index.html](index.html) (not E
 - [background.js](background.js) — `BackgroundField`: the animated dot-grid canvas, key-color flashes, wave animation
 - [instrument-mixes.js](instrument-mixes.js) — instrument timbre presets used by the mesh
 - [tuner.js](tuner.js) — `Tuner` panels (halo / pip / sound / tonal / color / instrument), deep-linkable via `?tune=1..6`
-- [seed-music.js](seed-music.js) — `SeedSequencer`, registered alongside the tuners (`?tune=7`)
+- [seed-music.js](seed-music.js) — `SeedSequencer`, registered alongside the tuners (`?tune=7`); its DELUXE toggle swaps in a two-voice measure-based generator (seeded key/mode, shuffled rhythm patterns, treble chords + bass line, reverb) modeled on codepen.io/jak_e/pen/EKRarY
 - [controls.js](controls.js) — `ControlBar` (left/right edge bars), `InstrumentSelector` bottom strip
 
 ## File layout

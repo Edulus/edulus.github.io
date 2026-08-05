@@ -82,3 +82,20 @@ img {
     opacity: 0.95;
   }
 }
+
+/* Gentle gold glow + throb for the seed-music DELUXE label, to draw the
+   eye to it while the toggle is off. Applied inline by seed-music.js;
+   settles (animation cleared) once deluxe is enabled. transform-origin
+   is left so the "✨ deluxe" text throbs in place beside its checkbox. */
+@keyframes deluxeThrob {
+  0%,
+  100% {
+    transform: scale(1);
+    text-shadow: 0 0 2px rgba(233, 196, 106, 0.35);
+  }
+  50% {
+    transform: scale(1.07);
+    text-shadow: 0 0 6px rgba(233, 196, 106, 0.9),
+      0 0 12px rgba(233, 196, 106, 0.5);
+  }
+}

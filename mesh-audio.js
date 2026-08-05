@@ -71,6 +71,11 @@ class MusicalMesh {
     // sequenced melody in the foreground. See ping() and sequencerPlay().
     this.sequencerActive = false;
 
+    // Convolution reverb wet level. 0 = fully dry (the default page
+    // sound is untouched). The seed-music DELUXE mode raises this while
+    // playing for a lusher, hall-like blend, then restores it on stop.
+    this.reverbWet = 0;
+
     // Tonal system, surfaced for ?tune=4. scaleIndex picks one of the
     // presets in MusicalMesh.SCALES; setScale() copies the chosen array
     // into this.scale, which noteForPosition reads each frame. Float
@@ -147,6 +152,17 @@ class MusicalMesh {
       this.compressor.connect(this.filter);
       this.filter.connect(this.audioCtx.destination);
 
+      // Parallel wet path: filter → convolver → wet gain → out. Sits at
+      // zero gain until something (DELUXE playback) turns it up, so the
+      // graph carries no audible reverb by default.
+      this.reverb = this.audioCtx.createConvolver();
+      this.reverb.buffer = this.buildReverbImpulse(2.5, 2.5);
+      this.reverbGain = this.audioCtx.createGain();
+      this.reverbGain.gain.value = this.reverbWet;
+      this.filter.connect(this.reverb);
+      this.reverb.connect(this.reverbGain);
+      this.reverbGain.connect(this.audioCtx.destination);
+
       this.enabled = true;
     } catch (err) {
       console.warn("Audio init failed:", err);
@@ -166,6 +182,25 @@ class MusicalMesh {
 
   applyFilterQ() {
     if (this.filter) this.filter.Q.value = this.filterQ;
+  }
+
+  applyReverbWet() {
+    if (this.reverbGain) this.reverbGain.gain.value = this.reverbWet;
+  }
+
+  // Synthesized impulse response: stereo decaying noise. Avoids shipping
+  // an IR sample file — good enough for an ambient hall wash.
+  buildReverbImpulse(seconds, decay) {
+    const rate = this.audioCtx.sampleRate;
+    const len = Math.floor(rate * seconds);
+    const buf = this.audioCtx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++) {
+      const data = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+      }
+    }
+    return buf;
   }
 
   // Keep the visual wave speed in sync with the audio wave speed so the

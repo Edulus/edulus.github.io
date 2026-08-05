@@ -4,12 +4,41 @@
 // Each note also pulses the matching dots via BackgroundField.exciteAt
 // so the canvas dances in lockstep with the audio.
 //
+// DELUXE mode (toggle in the panel) swaps the single-voice melody engine
+// for a measure-based two-voice generator modeled on jak_e's
+// "Procedurally Generated Music" pen (codepen.io/jak_e/pen/EKRarY):
+//   - the seed picks a root key and major/minor mode (mesh is retuned to
+//     that diatonic scale while playing, restored on stop)
+//   - every measure, each clef draws a rhythm pattern from a fixed
+//     length-sequence library and shuffles it
+//   - treble stacks 1-3 note chords with an adjacency-rejection rule
+//     (no two chord tones on neighboring scale degrees); bass walks its
+//     own independent single-note line two octaves down
+//   - each clef runs on a child PRNG derived from the main seed stream,
+//     so the voices diverge but the whole song stays seed-deterministic
+//   - a convolution reverb (mesh.reverbWet) opens up while playing for
+//     the lush hall blend the original got from Freeverb
+//
 // The seed-music slot lives in the left (audio) ControlBar. Clicking it
 // opens this panel; SeedSequencer exposes the same show/hide/toggle/
 // isVisible surface as Tuner so the bar's openTuner() can swap it with
 // any other panel and only one panel is ever visible at a time.
 
 class SeedSequencer {
+  // DELUXE rhythm library — note-length patterns that each fill one 4/4
+  // measure on an 8th-note grid (len n = one 1/n note = 8/n grid steps).
+  // Taken verbatim from the CodePen's _genLengthSequences().
+  static DELUXE_LEN_SEQS = [
+    [1],
+    [2, 2],
+    [2, 4, 4],
+    [2, 4, 8, 8],
+    [4, 4, 4, 4],
+    [2, 8, 8, 8, 8],
+    [4, 4, 4, 8, 8],
+    [8, 8, 8, 8, 8, 8, 8, 8],
+  ];
+
   constructor(mesh, bg) {
     this.mesh = mesh;
     this.bg = bg;
@@ -42,6 +71,16 @@ class SeedSequencer {
     // toward the scale tonic so phrases periodically "land."
     this.phraseLength = 16;
     this.stepCount = 0;
+    // DELUXE mode state. deluxeNotes is the playable pitch table (7
+    // diatonic degrees × octaves 2..5); deluxeSteps is the queue of
+    // pending 8th-note steps, refilled one generated measure at a time.
+    // savedTonal holds the mesh's scale/root so stop() can restore
+    // whatever the user had tuned before deluxe took the keys.
+    this.deluxe = false;
+    this.deluxeNotes = [];
+    this.deluxeSteps = [];
+    this.savedTonal = null;
+    this.deluxeReverbOn = false;
     // Tracks visual-pulse timeouts so stop() can cancel pending flashes
     // instead of relying on the `if (this.playing)` guard inside them.
     this.pendingTimeouts = [];
@@ -405,6 +444,59 @@ class SeedSequencer {
     bassLabel.textContent = "bass voice";
     bassRow.append(bassBox, bassLabel);
 
+    // DELUXE toggle — gold accent to set it apart from the green panel
+    // chrome. Sits directly under the title; flipping it while playing
+    // restarts the same seed in the new engine.
+    const DELUXE_GOLD = "#e9c46a";
+    const deluxeRow = document.createElement("label");
+    deluxeRow.style.cssText = [
+      "display:flex",
+      "align-items:center",
+      "gap:6px",
+      "margin-bottom:10px",
+      "cursor:pointer",
+      "font-weight:700",
+      "letter-spacing:0.08em",
+      "text-transform:uppercase",
+      "font-size:10px",
+      `color:${DELUXE_GOLD}`,
+    ].join(";");
+    const deluxeBox = document.createElement("input");
+    deluxeBox.type = "checkbox";
+    deluxeBox.checked = this.deluxe;
+    deluxeBox.style.accentColor = DELUXE_GOLD;
+    const deluxeLabel = document.createElement("span");
+    deluxeLabel.textContent = "✨ deluxe";
+    // inline-block so the throb's scale transform applies (transforms are
+    // ignored on plain inline elements); origin left keeps it beside the box.
+    deluxeLabel.style.cssText = "display:inline-block;transform-origin:left center";
+    deluxeRow.append(deluxeBox, deluxeLabel);
+    // Deluxe generates its own rhythms, chords, and bass clef, so the
+    // melodic-contour and drone controls don't apply — dim them. Also
+    // drives the gold throb (animation.css @keyframes deluxeThrob): the
+    // label glows and pulses while deluxe is OFF to invite the click,
+    // then settles once it's enabled — same "breathe until used" idiom as
+    // the mute button.
+    const applyDeluxeDim = () => {
+      for (const el of [leap.row, bassRow]) {
+        el.style.opacity = this.deluxe ? "0.35" : "1";
+        el.style.pointerEvents = this.deluxe ? "none" : "auto";
+      }
+      deluxeLabel.style.animation = this.deluxe
+        ? "none"
+        : "deluxeThrob 2.8s ease-in-out infinite";
+    };
+    applyDeluxeDim();
+    deluxeBox.addEventListener("change", () => {
+      this.deluxe = deluxeBox.checked;
+      applyDeluxeDim();
+      if (this.playing) {
+        const seed = this.input.value.trim();
+        if (seed) this.startWithSeed(seed);
+        else this.stop();
+      }
+    });
+
     const btn = document.createElement("button");
     btn.textContent = "▶";
     btn.style.cssText = [
@@ -433,9 +525,11 @@ class SeedSequencer {
       "Probability the next note is one scale step from the previous one. Higher = calmer, flowing line; lower = jumpier melody with more leaps.");
     addTooltip(bassRow, bassLabel,
       "Adds a slow root-note drone on the lowest octave, firing once per measure (every 8 eighth-notes). Pairs especially well with longer note lengths.");
+    addTooltip(deluxeRow, deluxeLabel,
+      "Full two-voice arrangement: the seed picks a key and major/minor mode, then composes measure by measure — shuffled rhythm patterns, 1-3 note treble chords, an independent bass line, and a reverb wash. Same seed, same song, every time.");
 
     panel.append(
-      titleWrap, seedWrap, bpmRow,
+      titleWrap, deluxeRow, seedWrap, bpmRow,
       sustain.row, density.row, leap.row, bassRow,
       btn
     );
@@ -477,16 +571,27 @@ class SeedSequencer {
   startWithSeed(seed) {
     this.stop();
     this.prng = this.makePrng(seed);
-    // Burn one PRNG draw for tempo so the BPM and the melody are both
-    // seed-deterministic — and the melody starts from the same state on
-    // every restart with the same seed.
-    this.bpm = 72 + Math.floor(this.prng() * 69); // 72..140
+    if (this.deluxe) {
+      // Deluxe draw order: root, mode, then tempo — all before any
+      // measure generation so the whole arrangement is seed-locked.
+      this.deluxeInit();
+      this.bpm = 60 + Math.floor(this.prng() * 61); // 60..120, like the pen
+      // Open the reverb send for the hall blend; stop() closes it.
+      this.mesh.reverbWet = 0.3;
+      this.mesh.applyReverbWet();
+      this.deluxeReverbOn = true;
+    } else {
+      // Burn one PRNG draw for tempo so the BPM and the melody are both
+      // seed-deterministic — and the melody starts from the same state on
+      // every restart with the same seed.
+      this.bpm = 72 + Math.floor(this.prng() * 69); // 72..140
+      // Seed the first note's bias state from the PRNG so the very first
+      // interval is also seed-determined (rather than always referencing
+      // the 4/2 default).
+      this.prevSlot = Math.floor(this.prng() * 10);
+      this.prevBand = Math.floor(this.prng() * 5);
+    }
     this.eighthSec = (60 / this.bpm) / 2;
-    // Seed the first note's bias state from the PRNG so the very first
-    // interval is also seed-determined (rather than always referencing
-    // the 4/2 default).
-    this.prevSlot = Math.floor(this.prng() * 10);
-    this.prevBand = Math.floor(this.prng() * 5);
     this.stepCount = 0;
     this.bpmInput.value = this.bpm;
     this.btn.textContent = "⏹";
@@ -508,6 +613,19 @@ class SeedSequencer {
     this.pendingTimeouts.length = 0;
     this.playing = false;
     this.mesh.sequencerActive = false;
+    // Hand the tonal system back: deluxe borrowed the mesh's scale/root
+    // for the seed's key; the user's own tuning comes back on stop.
+    if (this.savedTonal) {
+      this.mesh.scaleIndex = this.savedTonal.scaleIndex;
+      this.mesh.setScale();
+      this.mesh.rootKey = this.savedTonal.rootKey;
+      this.savedTonal = null;
+    }
+    if (this.deluxeReverbOn) {
+      this.mesh.reverbWet = 0;
+      this.mesh.applyReverbWet();
+      this.deluxeReverbOn = false;
+    }
     this.btn.textContent = "▶";
     if (wasPlaying && this.onPlayingChange) this.onPlayingChange(false);
   }
@@ -535,6 +653,7 @@ class SeedSequencer {
   }
 
   scheduleStep(when) {
+    if (this.deluxe) return this.deluxeScheduleStep(when);
     this.stepCount++;
     // Final-note resolution: on every phraseLength-th step, force the
     // slot to the scale tonic (slot 0) so phrases periodically land.
@@ -570,6 +689,138 @@ class SeedSequencer {
       if (this.playing) this.bg.exciteAt(x, y, 120);
     }, delayMs);
     this.pendingTimeouts.push(id);
+  }
+
+  // ============ DELUXE ENGINE ============
+
+  // Seed-determined key/mode, mesh retune, and pitch-table construction.
+  // Draw order (root, then mode) is part of the seed contract — changing
+  // it changes every seed's song.
+  deluxeInit() {
+    const root = Math.floor(this.prng() * 12);
+    const minor = this.prng() < 0.5;
+    if (!this.savedTonal) {
+      this.savedTonal = {
+        scaleIndex: this.mesh.scaleIndex,
+        rootKey: this.mesh.rootKey,
+      };
+    }
+    // SCALES[2] = Diatonic Maj, SCALES[3] = Diatonic Min (mesh-audio.js).
+    // Retuning the mesh keeps hover/click pitches in the song's key.
+    this.mesh.scaleIndex = minor ? 3 : 2;
+    this.mesh.setScale();
+    this.mesh.rootKey = root;
+    // Pitch table: 7 diatonic degrees × octaves 2..5, low to high — the
+    // same register span as the pen. Bass owns the lower half, treble
+    // the upper half, exactly like its offset scheme.
+    this.deluxeNotes = [];
+    const sems = this.mesh.scale;
+    for (let o = 2; o <= 5; o++) {
+      for (let d = 0; d < sems.length; d++) {
+        this.deluxeNotes.push({ sem: sems[d], oct: o, deg: d });
+      }
+    }
+    this.deluxeSteps = [];
+  }
+
+  // Same MIDI math as mesh.noteForSlot, but addressed by absolute
+  // octave + scale semitone so the two clefs get real registers instead
+  // of screen bands. Click transposition (keyOffset/octaveOffset) still
+  // applies, so retuning the grid mid-song shifts the whole arrangement.
+  deluxeFreq(n) {
+    const m = this.mesh;
+    const midi = 12 * (n.oct + 1) + n.sem + m.keyOffset + m.octaveOffset * 12 + m.rootKey;
+    return m.tuningA4 * Math.pow(2, (midi - 69) / 12);
+  }
+
+  // Compose one 4/4 measure (8 grid steps) for both clefs and append it
+  // to the step queue. Mirrors the pen's _getClef/_getChord/_getNote:
+  // child PRNG per clef, shuffled length sequence, 1..maxNotes chord
+  // tones with the adjacency-rejection rule.
+  deluxeGenMeasure() {
+    const steps = Array.from({ length: 8 }, () => []);
+    const half = Math.floor(this.deluxeNotes.length / 2);
+    const clefs = [
+      { name: "treb", maxNotes: 3, offset: half, base: 0.45 },
+      { name: "bass", maxNotes: 1, offset: 0,    base: 0.50 },
+    ];
+    for (const clef of clefs) {
+      // Child generator: one draw from the main stream seeds a fresh
+      // PRNG per clef, so treble and bass diverge deterministically.
+      const crand = this.makePrng(
+        Math.floor(this.prng() * 0xffffffff) + clef.name
+      );
+      const seqs = SeedSequencer.DELUXE_LEN_SEQS;
+      const seq = seqs[Math.floor(crand() * seqs.length)].slice();
+      // Fisher-Yates shuffle on the clef stream.
+      for (let i = seq.length - 1; i > 0; i--) {
+        const j = Math.floor(crand() * (i + 1));
+        [seq[i], seq[j]] = [seq[j], seq[i]];
+      }
+      let pos = 0;
+      for (const len of seq) {
+        const eighths = 8 / len; // len 1 = whole note = 8 grid steps
+        // The rests slider doubles as chord-drop probability in deluxe
+        // (the original had no rests at all; 0% reproduces that).
+        if (crand() >= this.density) {
+          const count = Math.ceil(crand() * clef.maxNotes);
+          const used = [];
+          for (let nth = 0; nth < count; nth++) {
+            // Reject candidates on or adjacent to an already-used scale
+            // degree — the pen's dissonance guard against stacked 2nds.
+            // Bounded retries instead of its unbounded recursion.
+            for (let tries = 0; tries < 30; tries++) {
+              const cand = Math.floor(crand() * half) + clef.offset;
+              if (
+                used.indexOf(cand) === -1 &&
+                used.indexOf(cand - 1) === -1 &&
+                used.indexOf(cand + 1) === -1
+              ) {
+                used.push(cand);
+                break;
+              }
+            }
+          }
+          if (used.length) {
+            steps[pos].push({
+              noteIdxs: used,
+              eighths,
+              intensity: clef.base + crand() * 0.25,
+            });
+          }
+        }
+        pos += eighths;
+        if (pos >= 8) break;
+      }
+    }
+    for (const s of steps) this.deluxeSteps.push(s);
+  }
+
+  // Deluxe counterpart of scheduleStep: play every chord landing on this
+  // grid step and pulse the dots under each chord tone.
+  deluxeScheduleStep(when) {
+    if (!this.deluxeSteps.length) this.deluxeGenMeasure();
+    const events = this.deluxeSteps.shift();
+    if (!events.length) return;
+    const ctx = this.mesh.audioCtx;
+    const delayMs = ctx ? Math.max(0, (when - ctx.currentTime) * 1000) : 0;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const degCount = this.mesh.scale.length;
+    for (const ev of events) {
+      const sustainSec = ev.eighths * this.eighthSec * this.noteLengthFrac;
+      for (const idx of ev.noteIdxs) {
+        const n = this.deluxeNotes[idx];
+        this.mesh.sequencerPlay(this.deluxeFreq(n), ev.intensity, when, sustainSec);
+        // Dot pulse: degree → x, octave (2..5, high on top) → y.
+        const x = (n.deg + 0.5) / degCount * w;
+        const y = ((5 - n.oct) + 0.5) / 4 * h;
+        const id = setTimeout(() => {
+          if (this.playing) this.bg.exciteAt(x, y, 110);
+        }, delayMs);
+        this.pendingTimeouts.push(id);
+      }
+    }
   }
 
   tick() {
