@@ -87,87 +87,99 @@
     <script src="animation.js"></script>
     <script>
       document.addEventListener("DOMContentLoaded", () => {
-        const musicalMesh = new MusicalMesh();
-        const background = new BackgroundField({ musicalMesh });
-
-        // Link the mesh to background so syncWaveSpeed() can write the
-        // tunable wave speed through to the visual side; also seed the
-        // mesh's mirror property with the current visual default.
-        musicalMesh.background = background;
-        musicalMesh.waveSpeed = background.waveSpeed;
-
-        // Seed-music panel is registered alongside the tuners so the
-        // ControlBar's "only one panel open" rule applies to it too.
-        const seedSequencer = new SeedSequencer(musicalMesh, background);
-
-        // Tuner panels are always instantiated (hidden by default) so the
-        // ControlBars can toggle them. URL ?tune=1 / ?tune=2 / ?tune=3
-        // still works as a deep-link to a specific panel.
-        const tuners = {
-          halo:       new Tuner(background, "halo"),
-          pip:        new Tuner(background, "pip"),
-          sound:      new Tuner(musicalMesh, "sound"),
-          tonal:      new Tuner(musicalMesh, "tonal"),
-          color:      new Tuner(background, "color"),
-          instrument: new Tuner(musicalMesh, "instrument"),
-          seed:       seedSequencer,
-        };
-        const tuneParam = (new URLSearchParams(location.search).get("tune") || "").toLowerCase();
-        if (tuneParam === "1") tuners.halo.show();
-        else if (tuneParam === "2") tuners.pip.show();
-        else if (tuneParam === "3") tuners.sound.show();
-        else if (tuneParam === "4") tuners.tonal.show();
-        else if (tuneParam === "5") tuners.color.show();
-        else if (tuneParam === "6") tuners.instrument.show();
-        else if (tuneParam === "7") tuners.seed.show();
-
-        const instrumentSelector = new InstrumentSelector(musicalMesh);
-
-        // The instrument tuner's dial writes mesh.currentMix and calls
-        // applyMix(); that fires this callback so the bottom bar re-skins
-        // its emojis and names to match the new mix.
-        musicalMesh.onMixChange = () => instrumentSelector.refreshLabels();
-
-        // Two bars: audio controls hug the left edge, visual controls
-        // hug the right edge. They share the same tuners dict so closing
-        // a panel on one side propagates to the other.
-        const leftBar  = new ControlBar({ mesh: musicalMesh, tuners, side: "left" });
-        const rightBar = new ControlBar({ mesh: musicalMesh, tuners, side: "right" });
-
-        // Keep the 🌱 slot lit while the sequencer is running so the user
-        // can find the stop control after closing the panel.
-        seedSequencer.onPlayingChange = () => ControlBar.refreshAll();
-
+        // Portal first: the launch buttons must keep their icons and
+        // click animation even if the audio layer below fails (a single
+        // script that doesn't load would otherwise throw ReferenceError
+        // here and kill everything after it).
         const layout = new Layout();
         const animation = new Animation(layout);
 
-        // The page loads muted. Audio turns on only when the user clicks
-        // the breathing sound toggle in the left control bar (controls.js).
-        // A plain click just resumes an already-enabled context — e.g. one
-        // the browser auto-suspended while the tab was backgrounded — it
-        // never unmutes on its own.
-        document.addEventListener("click", (e) => {
-          if (musicalMesh.enabled) musicalMesh.start();
-          // Project-button clicks should navigate, not retune the mesh.
-          if (e.target.closest(".button")) return;
-          // Instrument-slot clicks change the timbre, not the key.
-          if (e.target.closest(".instrument-slot")) return;
-          // Control-bar clicks (mute, tuner toggles) shouldn't retune either.
-          if (e.target.closest(".control-slot")) return;
-          // Tuner panel interactions (sliders, buttons) shouldn't retune.
-          if (e.target.closest(".tuner-panel")) return;
-          // Grid click → set new key/octave and play a chord at that location.
-          // When tonal panel's "Click locks key" is on, skip the retune so
-          // the picked scale/key/octave stays put (wave still fires).
-          const w = window.innerWidth;
-          const h = window.innerHeight;
-          if (!musicalMesh.keyLocked) {
-            musicalMesh.setAnchor(e.clientX, e.clientY, w, h);
-          }
-          background.flashAt(e.clientX, e.clientY);
-          background.setKeyColor(musicalMesh.keyOffset, musicalMesh.octaveOffset, e.clientX, e.clientY);
-          musicalMesh.waveTriggerAt(background.cyanDots, e.clientX, e.clientY, w, h, background.waveSpeed);
-        });
+        try {
+          const musicalMesh = new MusicalMesh();
+          const background = new BackgroundField({ musicalMesh });
+
+          // Link the mesh to background so syncWaveSpeed() can write the
+          // tunable wave speed through to the visual side; also seed the
+          // mesh's mirror property with the current visual default.
+          musicalMesh.background = background;
+          musicalMesh.waveSpeed = background.waveSpeed;
+
+          // Seed-music panel is registered alongside the tuners so the
+          // ControlBar's "only one panel open" rule applies to it too.
+          const seedSequencer = new SeedSequencer(musicalMesh, background);
+
+          // Tuner panels are always instantiated (hidden by default) so the
+          // ControlBars can toggle them. URL ?tune=1 / ?tune=2 / ?tune=3
+          // still works as a deep-link to a specific panel.
+          const tuners = {
+            halo:       new Tuner(background, "halo"),
+            pip:        new Tuner(background, "pip"),
+            sound:      new Tuner(musicalMesh, "sound"),
+            tonal:      new Tuner(musicalMesh, "tonal"),
+            color:      new Tuner(background, "color"),
+            instrument: new Tuner(musicalMesh, "instrument"),
+            seed:       seedSequencer,
+          };
+          const tuneParam = (new URLSearchParams(location.search).get("tune") || "").toLowerCase();
+          if (tuneParam === "1") tuners.halo.show();
+          else if (tuneParam === "2") tuners.pip.show();
+          else if (tuneParam === "3") tuners.sound.show();
+          else if (tuneParam === "4") tuners.tonal.show();
+          else if (tuneParam === "5") tuners.color.show();
+          else if (tuneParam === "6") tuners.instrument.show();
+          else if (tuneParam === "7") tuners.seed.show();
+
+          const instrumentSelector = new InstrumentSelector(musicalMesh);
+
+          // The instrument tuner's dial writes mesh.currentMix and calls
+          // applyMix(); that fires this callback so the bottom bar re-skins
+          // its emojis and names to match the new mix.
+          musicalMesh.onMixChange = () => instrumentSelector.refreshLabels();
+
+          // Two bars: audio controls hug the left edge, visual controls
+          // hug the right edge. They share the same tuners dict so closing
+          // a panel on one side propagates to the other.
+          const leftBar  = new ControlBar({ mesh: musicalMesh, tuners, side: "left" });
+          const rightBar = new ControlBar({ mesh: musicalMesh, tuners, side: "right" });
+
+          // Keep the 🌱 slot lit while the sequencer is running so the user
+          // can find the stop control after closing the panel.
+          seedSequencer.onPlayingChange = () => ControlBar.refreshAll();
+
+          // The page loads muted. Audio turns on only when the user clicks
+          // the breathing sound toggle in the left control bar (controls.js).
+          // A plain click just resumes an already-enabled context — e.g. one
+          // the browser auto-suspended while the tab was backgrounded — it
+          // never unmutes on its own.
+          document.addEventListener("click", (e) => {
+            if (musicalMesh.enabled) musicalMesh.start();
+            // Project-button clicks should navigate, not retune the mesh.
+            if (e.target.closest(".button")) return;
+            // Instrument-slot clicks change the timbre, not the key.
+            if (e.target.closest(".instrument-slot")) return;
+            // Control-bar clicks (mute, tuner toggles) shouldn't retune either.
+            if (e.target.closest(".control-slot")) return;
+            // Tuner panel interactions (sliders, buttons) shouldn't retune.
+            if (e.target.closest(".tuner-panel")) return;
+            // Grid click → set new key/octave and play a chord at that location.
+            // When tonal panel's "Click locks key" is on, skip the retune so
+            // the picked scale/key/octave stays put (wave still fires).
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            if (!musicalMesh.keyLocked) {
+              musicalMesh.setAnchor(e.clientX, e.clientY, w, h);
+            }
+            background.flashAt(e.clientX, e.clientY);
+            background.setKeyColor(musicalMesh.keyOffset, musicalMesh.octaveOffset, e.clientX, e.clientY);
+            musicalMesh.waveTriggerAt(background.cyanDots, e.clientX, e.clientY, w, h, background.waveSpeed);
+          });
+        } catch (err) {
+          // The launch portal above is already fully wired and doesn't
+          // depend on anything in this block — a missing/broken audio
+          // script (404, syntax error, one that threw on construction)
+          // leaves the buttons fully clickable instead of dead.
+          console.error("[edulus] musical mesh failed to initialize; portal still works:", err);
+        }
       });
     </script>
   </body>
