@@ -24,6 +24,17 @@ class BackgroundField {
     this.prevMouse = { x: -9999, y: -9999 };
     this.startTime = performance.now();
 
+    // Browsers fire a compatibility mousemove (plus mousedown/mouseup/click)
+    // right after touchend so :hover-driven UI still works after a tap.
+    // Left unguarded, that synthetic mousemove immediately re-pins
+    // mouse.x/y at the tap point right after touchend just cleared it to
+    // -9999 — and since a touch-only device never fires a real mouseout to
+    // clear it again, the last tap location would glow and keep re-exciting
+    // forever, and the next tap's path-sampling would draw a phantom swipe
+    // from that stale point to the new one. touchMouseGuardUntil silences
+    // mousemove for a brief window after any touch ends.
+    this.touchMouseGuardUntil = 0;
+
     // Layer geometry — ~12% denser than the original 17/34 spacing
     this.pinkSpacing = 30;
     this.cyanSpacing = 30;
@@ -86,6 +97,7 @@ class BackgroundField {
 
     window.addEventListener("resize", () => this.resize());
     window.addEventListener("mousemove", (e) => {
+      if (performance.now() < this.touchMouseGuardUntil) return;
       this.mouse.x = e.clientX;
       this.mouse.y = e.clientY;
     });
@@ -98,16 +110,25 @@ class BackgroundField {
 
     // Mirror touch position to the same mouse slot so the dot field and
     // musical mesh react to finger movement exactly like mouse hover.
-    window.addEventListener("touchmove", (e) => {
+    // touchstart matters on its own, not just as a touchmove precursor: it
+    // gives a stationary press-and-hold the same continuous excitement a
+    // resting mouse cursor gets, and it seeds prevMouse so the very first
+    // touchmove of a drag draws a proper interpolated trail instead of
+    // jumping straight to a single point (real mousemove never has this
+    // gap — the cursor position is already valid before any drag starts).
+    const setTouchPos = (e) => {
       const t = e.touches[0];
       if (t) {
         this.mouse.x = t.clientX;
         this.mouse.y = t.clientY;
       }
-    }, { passive: true });
+    };
+    window.addEventListener("touchstart", setTouchPos, { passive: true });
+    window.addEventListener("touchmove", setTouchPos, { passive: true });
     window.addEventListener("touchend", () => {
       this.mouse.x = -9999;
       this.mouse.y = -9999;
+      this.touchMouseGuardUntil = performance.now() + 500;
     }, { passive: true });
 
     this.animate = this.animate.bind(this);
