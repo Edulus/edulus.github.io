@@ -431,9 +431,19 @@ class BackgroundField {
     this.prevMouse.x = mx;
     this.prevMouse.y = my;
 
-    // Feed excitement updates to the musical mesh — cyan dots are the "keys"
+    // Feed excitement updates to the musical mesh — cyan dots are the "keys".
+    // Guarded because this is the one call in the frame that reaches into
+    // synthesis code outside this file; an uncaught throw here would abort
+    // the frame before requestAnimationFrame(this.animate) at the bottom
+    // re-arms, permanently freezing the whole canvas instead of just
+    // dropping a note. playVoice() already catches at the synthesis
+    // boundary — this is a backstop for anything else in the update path.
     if (this.musicalMesh) {
-      this.musicalMesh.update(this.cyanDots, w, h);
+      try {
+        this.musicalMesh.update(this.cyanDots, w, h);
+      } catch (err) {
+        console.warn("[background] musicalMesh.update failed:", err);
+      }
     }
 
     // --- Cyan halo layer (drawn first, behind) — this layer carries the mouse reaction ---

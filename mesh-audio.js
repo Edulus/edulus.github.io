@@ -267,7 +267,14 @@ class MusicalMesh {
     const t = (typeof when === "number") ? when : ctx.currentTime;
     const inst = this.instruments[this.currentInstrument];
     if (typeof sustainSec !== "number" || sustainSec <= 0) {
-      inst.voice.call(this, freq, intensity, t);
+      // A throw here would otherwise abort the remaining steps in
+      // tick()'s scheduling while-loop, dropping every note still queued
+      // for this frame — one bad voice call shouldn't skip the rest.
+      try {
+        inst.voice.call(this, freq, intensity, t);
+      } catch (err) {
+        console.warn("[mesh] sequencer voice synthesis failed:", inst.name, err);
+      }
       return;
     }
     const gate = ctx.createGain();
@@ -277,6 +284,8 @@ class MusicalMesh {
     this.master = gate;
     try {
       inst.voice.call(this, freq, intensity, t);
+    } catch (err) {
+      console.warn("[mesh] sequencer voice synthesis failed:", inst.name, err);
     } finally {
       this.master = realMaster;
     }
@@ -305,12 +314,22 @@ class MusicalMesh {
 
   // Dispatch to the active instrument's voice synthesis.
   // Returns false if the voice was rate-limited (caller can skip cooldown updates).
+  //
+  // Every hover-driven ping reaches this through update(), which runs inside
+  // BackgroundField's requestAnimationFrame loop. An uncaught throw here
+  // would abort that frame before it reaches its own rAF reschedule call,
+  // permanently freezing the dot field — so a synthesis bug degrades to a
+  // dropped note instead of a dead canvas.
   playVoice(freq, intensity, time) {
     const nowMs = performance.now();
     if (nowMs - this.lastVoiceTime < this.minVoiceIntervalMs) return false;
     this.lastVoiceTime = nowMs;
     const inst = this.instruments[this.currentInstrument];
-    inst.voice.call(this, freq, intensity, time);
+    try {
+      inst.voice.call(this, freq, intensity, time);
+    } catch (err) {
+      console.warn("[mesh] voice synthesis failed:", inst.name, err);
+    }
     return true;
   }
 
@@ -379,8 +398,16 @@ class MusicalMesh {
         // Direct voice call bypasses the cursor-sweep rate limit, which
         // exists to throttle hover spam — click events should ring through.
         const inst = this.instruments[this.currentInstrument];
-        inst.voice.call(this, freq, intensity, this.audioCtx.currentTime);
-        this.cooldowns.set(dot, performance.now());
+        try {
+          inst.voice.call(this, freq, intensity, this.audioCtx.currentTime);
+        } catch (err) {
+          console.warn("[mesh] wave voice synthesis failed:", inst.name, err);
+        } finally {
+          // Set regardless of the try outcome — a dot whose voice call
+          // threw shouldn't be left able to re-fire immediately on the
+          // next hover-driven excitement crossing.
+          this.cooldowns.set(dot, performance.now());
+        }
       }, delaySec * 1000);
       this._waveTimers.push(id);
     }
