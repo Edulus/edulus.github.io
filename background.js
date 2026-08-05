@@ -183,8 +183,8 @@ class BackgroundField {
   rebuildPinkColor() {
     const curHue = this.rgbToHue(this.cyanColor);
     const tgtHue = this.rgbToHue(this.targetCyanColor);
-    this.pinkColor = this.hslToRgb((curHue + this.pipHueOffset) % 360, 86, 64);
-    this.targetPinkColor = this.hslToRgb((tgtHue + this.pipHueOffset) % 360, 86, 64);
+    this.pinkColor = this.hslToRgb((curHue + this.pipHueOffset) % 360, this.pipSaturation, this.pipLightness);
+    this.targetPinkColor = this.hslToRgb((tgtHue + this.pipHueOffset) % 360, this.pipSaturation, this.pipLightness);
   }
 
   rgbToHue(rgb) {

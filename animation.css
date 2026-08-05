@@ -13,6 +13,10 @@ body {
   justify-content: center;
   align-items: center;
   height: 100vh;
+  /* Mobile: 100vh includes the browser's retracted URL bar, pushing the
+     centered ring down and under the instrument strip. dvh tracks the
+     *visible* viewport; browsers without dvh keep the vh line above. */
+  height: 100dvh;
   margin: 0;
   background-color: #222;
   color: #fff;
@@ -37,6 +41,15 @@ img {
 .button:hover {
   transform: scale(1.05);
   background-color: #444;
+}
+
+/* Keyboard focus mirrors hover — the tiles are links, so Tab should give
+   the same feedback the mouse gets, plus a visible ring. */
+.button:focus-visible {
+  transform: scale(1.05);
+  background-color: #444;
+  outline: 2px solid rgba(0, 183, 255, 0.8);
+  outline-offset: 3px;
 }
 
 .button-wrapper::after {
@@ -65,10 +78,15 @@ img {
   transition: opacity 0.3s, transform 0.3s;
 }
 
-.button-wrapper:hover .tooltip {
+.button-wrapper:hover .tooltip,
+.button-wrapper:focus-within .tooltip {
   visibility: visible;
   opacity: 1;
   transform: translateX(-50%) translateY(10px);
+}
+
+.button-wrapper:focus-within::after {
+  opacity: 1;
 }
 
 /* Gentle "breathing" pulse for the left-bar sound toggle while the page
@@ -97,5 +115,39 @@ img {
     transform: scale(1.07);
     text-shadow: 0 0 6px rgba(233, 196, 106, 0.9),
       0 0 12px rgba(233, 196, 106, 0.5);
+  }
+}
+
+/* Small-screen guard for the tuner/seed panels (tuner.js, seed-music.js
+   position them inline at left/right:80px, min-width 240px). On a narrow
+   or short viewport, cap them to the screen and scroll internally instead
+   of overflowing. Not applied on desktop, where overflow must stay
+   visible so the hover tooltips can float outside the panel. */
+@media (max-width: 480px), (max-height: 600px) {
+  .tuner-panel {
+    max-width: calc(100vw - 96px);
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+  }
+}
+
+/* Respect the OS "reduce motion" preference for the decorative invite
+   pulses and hover zooms. The canvas dot field is the page's content and
+   keeps animating; this only stills the CSS-driven flourishes. */
+@media (prefers-reduced-motion: reduce) {
+  .button,
+  .button-wrapper::after,
+  .button-wrapper .tooltip {
+    transition: none;
+  }
+  .button:hover,
+  .button:focus-visible {
+    transform: none;
+  }
+  [style*="controlPulse"],
+  [style*="deluxeThrob"] {
+    animation: none !important;
+    opacity: 0.95 !important;
   }
 }

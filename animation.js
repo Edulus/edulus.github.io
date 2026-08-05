@@ -15,6 +15,10 @@ class Animation {
 
     buttons.forEach((button, index) => {
       button.addEventListener("click", (e) => {
+        // Modified clicks (ctrl/cmd = new tab, shift = new window) keep
+        // their native behavior — only a plain left click gets the
+        // zoom-out animation and same-tab navigation.
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || e.button !== 0) return;
         e.preventDefault();
         this.animateButton(button, buttonEmojis[index], button.href);
       });
