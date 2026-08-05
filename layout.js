@@ -1,7 +1,7 @@
 // layout.js
 class Layout {
   constructor() {
-    this.buttonEmojis = ["👽", "🥚", "✨", "🌀", "🔊", "🏓", null];
+    this.buttonEmojis = ["👽", "🥚", "✨", "🌀", "🔊", "🏓", null, "📡", "📻"];
     this.buttons = document.querySelectorAll(".button");
     this.init();
   }
@@ -12,7 +12,7 @@ class Layout {
     window.addEventListener("resize", () => this.scaleContainer());
   }
 
-  // Scale the hex container down so it fits the viewport on small screens.
+  // Scale the ring container down so it fits the viewport on small screens.
   // CSS zoom affects layout (unlike transform:scale), so the flexbox centering
   // continues to work correctly without any margin compensation.
   scaleContainer() {
@@ -20,12 +20,14 @@ class Layout {
     if (!el) return;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    // On phones, cap the hex at 72% of viewport width so there's open canvas
+    // On phones, cap the ring at 72% of viewport width so there's open canvas
     // above/below/around it for touch-to-music interaction.
     // On wider screens, just subtract 16px of edge padding.
     const maxWidth = vw < 600 ? vw * 0.72 : vw - 16;
+    // vh - 70 keeps the ring clear of the 60px instrument strip at the bottom.
     const available = Math.min(maxWidth, vh - 70);
-    const scale = Math.min(1, available / 500);
+    // 540 must track .container's width/height in layout.css.
+    const scale = Math.min(1, available / 540);
     el.style.zoom = scale;
   }
 
