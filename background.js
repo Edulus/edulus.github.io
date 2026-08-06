@@ -49,6 +49,20 @@ class BackgroundField {
     this.haloMidstopPos = 0.46;
     this.haloMidstopAlpha = 0.50;
 
+    // Comet trail — an independent overlay drawn on top of the dot grid,
+    // not tied to any dot's excitement state. The grid's own "trail" is
+    // just decay lag across neighboring dots (soft, undefined); this is a
+    // real moving shape: the last several cursor positions kept as aging
+    // beads (shrink + fade with age) plus a bright head at the live
+    // position. Works identically for mouse and touch since both write
+    // through the same this.mouse slot.
+    this.trail = []; // { x, y, age } — age is frames since recorded
+    this.trailMaxAge = 14;       // frames a bead survives (~230ms at 60fps)
+    this.trailMinSpacing = 3;    // px the cursor must move before a new bead is recorded
+    this.trailBeadRadius = 9;    // max radius (px) of a fresh bead
+    this.trailBeadAlpha = 0.65;  // max alpha of a fresh bead
+    this.trailHeadRadius = 4;    // px, the bright dot at the live cursor position
+
     // Pip layer dials, surfaced for ?tune=2.
     // pipHueOffset is the degrees on the iridescent wheel between halo and
     // pip — 180 makes them true complements, 60 was the original analogous.
@@ -547,6 +561,39 @@ class BackgroundField {
       ctx.fillStyle = `rgba(${cr1},${cg1},${cb1},${alpha})`;
       ctx.beginPath();
       ctx.arc(d.x, d.y, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // --- Comet trail (drawn last, on top of everything) ---
+    // Independent of dot excitement: record a bead when the cursor has
+    // moved far enough since the last one, then age and draw every bead
+    // still alive, shrinking and fading as it ages out. Gives cursor
+    // motion a distinct trailing shape instead of relying on decay lag
+    // across neighboring grid dots.
+    if (mouseValid) {
+      const last = this.trail[this.trail.length - 1];
+      if (!last || Math.hypot(mx - last.x, my - last.y) > this.trailMinSpacing) {
+        this.trail.push({ x: mx, y: my, age: 0 });
+      }
+    }
+    const [tr, tg, tb] = this.cyanColor;
+    for (let i = this.trail.length - 1; i >= 0; i--) {
+      const bead = this.trail[i];
+      bead.age++;
+      if (bead.age > this.trailMaxAge) {
+        this.trail.splice(i, 1);
+        continue;
+      }
+      const life = 1 - bead.age / this.trailMaxAge; // 1 = fresh, 0 = about to vanish
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(${tr},${tg},${tb},${(life * this.trailBeadAlpha).toFixed(2)})`;
+      ctx.arc(bead.x, bead.y, life * this.trailBeadRadius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (mouseValid) {
+      ctx.beginPath();
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.arc(mx, my, this.trailHeadRadius, 0, Math.PI * 2);
       ctx.fill();
     }
 

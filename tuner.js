@@ -16,7 +16,7 @@ class Tuner {
       accent: "#08b1f3",
       side: "right",
       description:
-        "The large glowing dot that tracks your cursor. Adjust how concentrated the kernel is, how long the trail lingers behind the cursor, the shape of the falloff, and how each individual dot's halo is rendered.",
+        "The large glowing dot that tracks your cursor, plus the comet trail that follows it. Adjust how concentrated the kernel is, how long the trail lingers behind the cursor, the shape of the falloff, how each individual dot's halo is rendered, and the separate comet-tail overlay's length, size, and brightness.",
       dials: [
         { key: "influenceRadius",  label: "Influence radius",   min: 40,   max: 250,  step: 5,     fixed: 0, tooltip: "Radius (px) around the cursor where halos start glowing. Smaller = tight spotlight; larger = wider illuminated zone." },
         { key: "decayFactor",      label: "Trail decay",        min: 0.85, max: 0.99, step: 0.005, fixed: 3, tooltip: "How slowly excited halos fade after the cursor passes. Higher = longer-lingering trail; lower = trail snaps off quickly." },
@@ -25,6 +25,11 @@ class Tuner {
         { key: "haloCenterAlpha",  label: "Sprite center α",    min: 0.3,  max: 1.0,  step: 0.02,  fixed: 2, tooltip: "Opacity at the very center of each halo's gradient sprite. Higher = denser cores; lower = wispy translucent halos." },
         { key: "haloMidstopPos",   label: "Sprite midstop pos", min: 0.10, max: 0.60, step: 0.02,  fixed: 2, tooltip: "Where the halo gradient transitions from bright to soft. Higher = wider bright core, sharper edge; lower = tight core, long soft tail." },
         { key: "haloMidstopAlpha", label: "Sprite midstop α",   min: 0.0,  max: 0.5,  step: 0.02,  fixed: 2, tooltip: "Opacity at the midpoint of each halo's gradient — controls how brightness fades from center to edge." },
+        { key: "trailMaxAge",      label: "Comet tail length",  min: 4,    max: 40,   step: 1,     fixed: 0, tooltip: "How many frames a comet-tail bead survives before vanishing. Higher = longer trailing tail; lower = short, tight tail." },
+        { key: "trailMinSpacing",  label: "Comet bead spacing", min: 1,    max: 15,   step: 1,     fixed: 0, tooltip: "Minimum distance (px) the cursor must move before a new comet-tail bead is recorded. Lower = smoother, denser tail; higher = sparser beads." },
+        { key: "trailBeadRadius",  label: "Comet bead size",    min: 2,    max: 20,   step: 1,     fixed: 0, tooltip: "Radius (px) of a freshly recorded comet-tail bead, before it shrinks with age." },
+        { key: "trailBeadAlpha",   label: "Comet bead α",       min: 0.0,  max: 1.0,  step: 0.05,  fixed: 2, tooltip: "Opacity of a freshly recorded comet-tail bead, before it fades with age." },
+        { key: "trailHeadRadius",  label: "Comet head size",    min: 0,    max: 12,   step: 1,     fixed: 0, tooltip: "Radius (px) of the bright white dot marking the live cursor position at the head of the comet tail. 0 hides it." },
       ],
       simpleDials: [
         { key: "influenceRadius", label: "Glow size",     min: 40,   max: 250,  step: 5,     fixed: 0, tooltip: "How wide the glowing area around your cursor reaches." },
