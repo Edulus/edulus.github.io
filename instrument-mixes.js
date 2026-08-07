@@ -134,36 +134,51 @@ function voiceTrumpetClassic(freq, intensity, time) {
   vibrato.stop(time + 1.4);
 }
 
+// Two barely-detuned sawtooths (classic "chorus bass" amp trick) instead of
+// one give the fundamental some width without smearing the pitch, and a
+// mild waveshaper (same helper voiceSubBass uses) adds harmonic saturation
+// so the tone reads as driven through an amp rather than a bare oscillator.
 function voiceBassGuitar(freq, intensity, time) {
   const ctx = this.audioCtx;
   const f = freq / 4;
-  const osc = ctx.createOscillator();
-  osc.type = "sawtooth";
-  osc.frequency.value = f;
   const filter = ctx.createBiquadFilter();
   filter.type = "lowpass";
   filter.Q.value = 6;
   filter.frequency.setValueAtTime(2200, time);
   filter.frequency.exponentialRampToValueAtTime(400, time + 0.35);
+  const shaper = makeShaper(ctx, 2.5);
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, time);
   env.gain.linearRampToValueAtTime(0.55 * intensity, time + 0.005);
   env.gain.exponentialRampToValueAtTime(0.001, time + 1.0);
-  osc.connect(filter);
-  filter.connect(env);
+  filter.connect(shaper);
+  shaper.connect(env);
   env.connect(this.master);
-  osc.start(time);
-  osc.stop(time + 1.1);
+  for (const detune of [-4, 4]) {
+    const osc = ctx.createOscillator();
+    osc.type = "sawtooth";
+    osc.frequency.value = f;
+    osc.detune.value = detune;
+    osc.connect(filter);
+    osc.start(time);
+    osc.stop(time + 1.1);
+  }
 }
 
+// A bank of perfectly-tuned sine harmonics is what makes an additive patch
+// read as synthetic — real piano strings are slightly INHARMONIC (higher
+// partials run sharp of pure integer multiples) and each note is actually
+// 2-3 physical strings beating gently against each other. detuneCents
+// grows with harmonic number to mimic inharmonicity; the fundamental gets
+// a second, faintly-detuned oscillator for that natural unison beat.
 function voicePiano(freq, intensity, time) {
   const ctx = this.audioCtx;
   const harmonics = [
-    { mult: 1, gain: 0.7 },
-    { mult: 2, gain: 0.32 },
-    { mult: 3, gain: 0.16 },
-    { mult: 4, gain: 0.08 },
-    { mult: 5, gain: 0.04 },
+    { mult: 1, gain: 0.7,  detuneCents: 0 },
+    { mult: 2, gain: 0.32, detuneCents: 1.2 },
+    { mult: 3, gain: 0.16, detuneCents: 2.4 },
+    { mult: 4, gain: 0.08, detuneCents: 3.8 },
+    { mult: 5, gain: 0.04, detuneCents: 5.5 },
   ];
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, time);
@@ -174,6 +189,7 @@ function voicePiano(freq, intensity, time) {
     const osc = ctx.createOscillator();
     osc.type = "sine";
     osc.frequency.value = freq * h.mult;
+    osc.detune.value = h.detuneCents;
     const g = ctx.createGain();
     g.gain.value = h.gain;
     osc.connect(g);
@@ -181,13 +197,28 @@ function voicePiano(freq, intensity, time) {
     osc.start(time);
     osc.stop(time + 2.1);
   }
+  // Second unison string on the fundamental only, detuned the other way —
+  // the slow beat this produces against the first is what makes a real
+  // piano note feel alive rather than a static tone.
+  const unison = ctx.createOscillator();
+  unison.type = "sine";
+  unison.frequency.value = freq;
+  unison.detune.value = -3;
+  const ug = ctx.createGain();
+  ug.gain.value = 0.35;
+  unison.connect(ug);
+  ug.connect(env);
+  unison.start(time);
+  unison.stop(time + 2.1);
 }
 
+// Real harpsichords have multiple string choirs per note (8' + 4', often
+// both engaged) — a single sawtooth reads as a synth pluck rather than an
+// instrument with that layered, slightly-detuned register stacking. A
+// second string a touch sharp, mixed quieter, adds shimmer without
+// softening the characteristic metallic edge the highpass gives it.
 function voiceHarpsichord(freq, intensity, time) {
   const ctx = this.audioCtx;
-  const osc = ctx.createOscillator();
-  osc.type = "sawtooth";
-  osc.frequency.value = freq;
   const filter = ctx.createBiquadFilter();
   filter.type = "highpass";
   filter.frequency.value = freq * 1.5;
@@ -195,11 +226,26 @@ function voiceHarpsichord(freq, intensity, time) {
   env.gain.setValueAtTime(0, time);
   env.gain.linearRampToValueAtTime(0.35 * intensity, time + 0.002);
   env.gain.exponentialRampToValueAtTime(0.001, time + 0.7);
-  osc.connect(filter);
   filter.connect(env);
   env.connect(this.master);
+
+  const osc = ctx.createOscillator();
+  osc.type = "sawtooth";
+  osc.frequency.value = freq;
+  osc.connect(filter);
   osc.start(time);
   osc.stop(time + 0.8);
+
+  const osc2 = ctx.createOscillator();
+  osc2.type = "sawtooth";
+  osc2.frequency.value = freq;
+  osc2.detune.value = 9;
+  const g2 = ctx.createGain();
+  g2.gain.value = 0.4;
+  osc2.connect(g2);
+  g2.connect(filter);
+  osc2.start(time);
+  osc2.stop(time + 0.8);
 }
 
 function voiceBell(freq, intensity, time) {
@@ -279,19 +325,37 @@ function voicePadClassic(freq, intensity, time) {
   lfo.stop(time + 3.5);
 }
 
+// Triangle is naturally hollow; a second detuned oscillator fills it in.
+// A simple highpass filter kills the rumble and gives the pluck the
+// bright, percussive character of a real string being plucked. Quick
+// attack + exponential decay mimics the natural envelope.
 function voicePluck(freq, intensity, time) {
   const ctx = this.audioCtx;
-  const osc = ctx.createOscillator();
-  osc.type = "triangle";
-  osc.frequency.value = freq;
+  const filter = ctx.createBiquadFilter();
+  filter.type = "highpass";
+  filter.frequency.value = freq * 0.8;
+  filter.Q.value = 0.7;
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, time);
   env.gain.linearRampToValueAtTime(0.55 * intensity, time + 0.003);
   env.gain.exponentialRampToValueAtTime(0.001, time + 0.55);
-  osc.connect(env);
+  filter.connect(env);
   env.connect(this.master);
+
+  const osc = ctx.createOscillator();
+  osc.type = "triangle";
+  osc.frequency.value = freq;
+  osc.connect(filter);
   osc.start(time);
   osc.stop(time + 0.65);
+
+  const osc2 = ctx.createOscillator();
+  osc2.type = "triangle";
+  osc2.frequency.value = freq;
+  osc2.detune.value = 7;
+  osc2.connect(filter);
+  osc2.start(time);
+  osc2.stop(time + 0.65);
 }
 
 // =================================================================
