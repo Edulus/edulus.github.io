@@ -558,7 +558,10 @@ class Tuner {
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(text)
         .then(() => done("Copied " + this.dials.length + " values", "#8d7"))
-        .catch(() => done("Copy failed — see console", "#f88"));
+        .catch((e) => {
+          console.error("[tuner:" + this.setKey + "] clipboard copy failed:", e);
+          done("Copy failed — see console", "#f88");
+        });
     } else {
       const ta = document.createElement("textarea");
       ta.value = text;
@@ -569,6 +572,7 @@ class Tuner {
         document.execCommand("copy");
         done("Copied " + this.dials.length + " values", "#8d7");
       } catch (e) {
+        console.error("[tuner:" + this.setKey + "] clipboard copy failed:", e);
         done("Copy failed — see console", "#f88");
       }
       ta.remove();

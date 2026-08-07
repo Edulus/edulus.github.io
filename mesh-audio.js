@@ -348,13 +348,6 @@ class MusicalMesh {
     this.playVoice(freq, 1.0, this.audioCtx.currentTime);
   }
 
-  // Click-driven force-ping with explicit intensity and time delay (no cooldown)
-  pingAt(dot, freq, intensity, delay) {
-    if (!this.enabled || !this.audioCtx) return;
-    this.cooldowns.set(dot, performance.now());
-    this.playVoice(freq, intensity, this.audioCtx.currentTime + delay);
-  }
-
   // Schedule a ripple of notes that emanates outward from (cx, cy) in sync
   // with the visual bow-wave: each dot's pitch (from noteForPosition) fires
   // when the wavefront reaches it (delay = dist / waveSpeed). Pitches come
@@ -410,26 +403,6 @@ class MusicalMesh {
         }
       }, delaySec * 1000);
       this._waveTimers.push(id);
-    }
-  }
-
-  // Force-play a chord at a position (used on key-change clicks)
-  retriggerAt(dots, cx, cy, w, h, radius = 220) {
-    if (!this.enabled || !this.audioCtx) return;
-    const rSq = radius * radius;
-    let stagger = 0;
-    for (let i = 0; i < dots.length; i++) {
-      const dot = dots[i];
-      const dx = dot.x - cx;
-      const dy = dot.y - cy;
-      const distSq = dx * dx + dy * dy;
-      if (distSq < rSq) {
-        const intensity = 1 - Math.sqrt(distSq) / radius;
-        const freq = this.noteForPosition(dot.x, dot.y, w, h);
-        this.pingAt(dot, freq, intensity, stagger * 0.008);
-        stagger++;
-        this.previousExcitement.set(dot, 0);
-      }
     }
   }
 
