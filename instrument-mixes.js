@@ -248,13 +248,19 @@ function voiceHarpsichord(freq, intensity, time) {
   osc2.stop(time + 0.8);
 }
 
+// The inharmonic multipliers already give this its bell-like character, but
+// a bank of perfectly steady partials still reads as static — real bells
+// shimmer because their partials beat gently against each other. A little
+// detune per partial (growing with index) plus a detuned unison on the
+// fundamental gives it that same slow, alive shimmer (same treatment as
+// voicePiano's inharmonicity/unison, reused here for a struck-metal voice).
 function voiceBell(freq, intensity, time) {
   const ctx = this.audioCtx;
   const harmonics = [
-    { mult: 1, gain: 0.5 },
-    { mult: 2.0, gain: 0.25 },
-    { mult: 2.76, gain: 0.3 },
-    { mult: 5.4, gain: 0.15 },
+    { mult: 1,    gain: 0.5,  detuneCents: 0 },
+    { mult: 2.0,  gain: 0.25, detuneCents: 2 },
+    { mult: 2.76, gain: 0.3,  detuneCents: 3.5 },
+    { mult: 5.4,  gain: 0.15, detuneCents: 6 },
   ];
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, time);
@@ -265,6 +271,7 @@ function voiceBell(freq, intensity, time) {
     const osc = ctx.createOscillator();
     osc.type = "sine";
     osc.frequency.value = freq * h.mult;
+    osc.detune.value = h.detuneCents;
     const g = ctx.createGain();
     g.gain.value = h.gain;
     osc.connect(g);
@@ -272,6 +279,16 @@ function voiceBell(freq, intensity, time) {
     osc.start(time);
     osc.stop(time + 3.1);
   }
+  const unison = ctx.createOscillator();
+  unison.type = "sine";
+  unison.frequency.value = freq;
+  unison.detune.value = -4;
+  const ug = ctx.createGain();
+  ug.gain.value = 0.3;
+  unison.connect(ug);
+  ug.connect(env);
+  unison.start(time);
+  unison.stop(time + 3.1);
 }
 
 // Pad: 7 detuned sawtooths through two filter stages, a slow LFO sweeping
@@ -566,13 +583,16 @@ function voiceStringPad(freq, intensity, time) {
   }
 }
 
+// Same shimmer treatment as voiceBell: small growing detune per partial
+// plus a detuned unison on the fundamental, so the struck-bar tone beats
+// gently instead of sitting perfectly static.
 function voiceGlockenspiel(freq, intensity, time) {
   const ctx = this.audioCtx;
   const harmonics = [
-    { mult: 1, gain: 0.5 },
-    { mult: 3, gain: 0.4 },
-    { mult: 5.4, gain: 0.3 },
-    { mult: 8.9, gain: 0.18 },
+    { mult: 1,   gain: 0.5,  detuneCents: 0 },
+    { mult: 3,   gain: 0.4,  detuneCents: 2.5 },
+    { mult: 5.4, gain: 0.3,  detuneCents: 4.5 },
+    { mult: 8.9, gain: 0.18, detuneCents: 7 },
   ];
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, time);
@@ -583,6 +603,7 @@ function voiceGlockenspiel(freq, intensity, time) {
     const osc = ctx.createOscillator();
     osc.type = "sine";
     osc.frequency.value = freq * h.mult * 2; // octave up for glock register
+    osc.detune.value = h.detuneCents;
     const g = ctx.createGain();
     g.gain.value = h.gain;
     osc.connect(g);
@@ -590,6 +611,16 @@ function voiceGlockenspiel(freq, intensity, time) {
     osc.start(time);
     osc.stop(time + 1.9);
   }
+  const unison = ctx.createOscillator();
+  unison.type = "sine";
+  unison.frequency.value = freq * 2;
+  unison.detune.value = -3.5;
+  const ug = ctx.createGain();
+  ug.gain.value = 0.3;
+  unison.connect(ug);
+  ug.connect(env);
+  unison.start(time);
+  unison.stop(time + 1.9);
 }
 
 // Timpani: low pitched sine + filtered noise tail for a tuned drum thump.
@@ -797,13 +828,17 @@ function voiceAnalogPad(freq, intensity, time) {
   lfo.stop(time + 3.3);
 }
 
+// Same shimmer treatment as voiceBell/voiceGlockenspiel — small growing
+// detune per partial plus a detuned unison on the fundamental. Chime's
+// long 3.5s decay makes a static harmonic bank especially noticeable, so
+// this one benefits the most from the added movement.
 function voiceChime(freq, intensity, time) {
   const ctx = this.audioCtx;
   const harmonics = [
-    { mult: 1, gain: 0.5 },
-    { mult: 2.5, gain: 0.35 },
-    { mult: 4.7, gain: 0.25 },
-    { mult: 7.1, gain: 0.18 },
+    { mult: 1,   gain: 0.5,  detuneCents: 0 },
+    { mult: 2.5, gain: 0.35, detuneCents: 2 },
+    { mult: 4.7, gain: 0.25, detuneCents: 4 },
+    { mult: 7.1, gain: 0.18, detuneCents: 6.5 },
   ];
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, time);
@@ -814,6 +849,7 @@ function voiceChime(freq, intensity, time) {
     const osc = ctx.createOscillator();
     osc.type = "sine";
     osc.frequency.value = freq * h.mult;
+    osc.detune.value = h.detuneCents;
     const g = ctx.createGain();
     g.gain.value = h.gain;
     osc.connect(g);
@@ -821,6 +857,16 @@ function voiceChime(freq, intensity, time) {
     osc.start(time);
     osc.stop(time + 3.6);
   }
+  const unison = ctx.createOscillator();
+  unison.type = "sine";
+  unison.frequency.value = freq;
+  unison.detune.value = -3;
+  const ug = ctx.createGain();
+  ug.gain.value = 0.3;
+  unison.connect(ug);
+  ug.connect(env);
+  unison.start(time);
+  unison.stop(time + 3.6);
 }
 
 // Clap: three quick bandpassed noise bursts staggered for the classic
@@ -961,13 +1007,16 @@ function voiceBansuri(freq, intensity, time) {
   vibrato.stop(time + 1.7);
 }
 
+// Same shimmer treatment as the other mallet/bell voices — small growing
+// detune per partial plus a detuned unison on the fundamental, mimicking
+// the natural beat of a real tine's overtones.
 function voiceKalimba(freq, intensity, time) {
   const ctx = this.audioCtx;
   const harmonics = [
-    { mult: 1, gain: 0.6 },
-    { mult: 2, gain: 0.25 },
-    { mult: 4, gain: 0.12 },
-    { mult: 6.3, gain: 0.08 },
+    { mult: 1,   gain: 0.6,  detuneCents: 0 },
+    { mult: 2,   gain: 0.25, detuneCents: 1.5 },
+    { mult: 4,   gain: 0.12, detuneCents: 3 },
+    { mult: 6.3, gain: 0.08, detuneCents: 5 },
   ];
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, time);
@@ -978,6 +1027,7 @@ function voiceKalimba(freq, intensity, time) {
     const osc = ctx.createOscillator();
     osc.type = "sine";
     osc.frequency.value = freq * h.mult;
+    osc.detune.value = h.detuneCents;
     const g = ctx.createGain();
     g.gain.value = h.gain;
     osc.connect(g);
@@ -985,6 +1035,16 @@ function voiceKalimba(freq, intensity, time) {
     osc.start(time);
     osc.stop(time + 1.2);
   }
+  const unison = ctx.createOscillator();
+  unison.type = "sine";
+  unison.frequency.value = freq;
+  unison.detune.value = -3;
+  const ug = ctx.createGain();
+  ug.gain.value = 0.35;
+  unison.connect(ug);
+  ug.connect(env);
+  unison.start(time);
+  unison.stop(time + 1.2);
 }
 
 // Tanpura: drone — sustained, layered octaves with very slow envelope.
@@ -1024,13 +1084,15 @@ function voiceTanpura(freq, intensity, time) {
   }
 }
 
-// Marimba: warm sine + 4th harmonic, fast exponential decay.
+// Marimba: warm sine + 4th harmonic, fast exponential decay. Same shimmer
+// treatment as the other mallet/bell voices — small growing detune per
+// partial plus a detuned unison on the fundamental.
 function voiceMarimba(freq, intensity, time) {
   const ctx = this.audioCtx;
   const harmonics = [
-    { mult: 1, gain: 0.75 },
-    { mult: 4, gain: 0.30 },
-    { mult: 9.2, gain: 0.10 },
+    { mult: 1,   gain: 0.75, detuneCents: 0 },
+    { mult: 4,   gain: 0.30, detuneCents: 3 },
+    { mult: 9.2, gain: 0.10, detuneCents: 6 },
   ];
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, time);
@@ -1041,6 +1103,7 @@ function voiceMarimba(freq, intensity, time) {
     const osc = ctx.createOscillator();
     osc.type = "sine";
     osc.frequency.value = freq * h.mult;
+    osc.detune.value = h.detuneCents;
     const g = ctx.createGain();
     g.gain.value = h.gain;
     osc.connect(g);
@@ -1048,6 +1111,16 @@ function voiceMarimba(freq, intensity, time) {
     osc.start(time);
     osc.stop(time + 1.2);
   }
+  const unison = ctx.createOscillator();
+  unison.type = "sine";
+  unison.frequency.value = freq;
+  unison.detune.value = -3;
+  const ug = ctx.createGain();
+  ug.gain.value = 0.4;
+  unison.connect(ug);
+  ug.connect(env);
+  unison.start(time);
+  unison.stop(time + 1.2);
 }
 
 // Tabla: pitched skin hit — bandpassed noise tuned to the note.
