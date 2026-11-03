@@ -131,6 +131,10 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .facts dt{font-family:var(--f-mono);font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--river);padding-top:4px}
 .facts dd{margin:0;font-size:.95rem}
 .sect{margin-top:56px}
+.mapsec{margin-block:8px 48px}
+.map{margin:20px 0 0}
+.map img{width:100%;height:auto;border-radius:6px;border:1px solid var(--line)}
+.map figcaption{font-size:.85rem;color:var(--muted);margin-top:8px}
 .sectlede{color:var(--muted);max-width:62ch;margin:12px 0 0}
 .strip.tight{margin-block:20px 0}
 .strip.four{grid-template-columns:repeat(4,1fr);margin-block:20px 0}
