@@ -91,6 +91,9 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .plan{margin:16px 0 0;padding:0;list-style:none;display:grid;gap:10px}
 .plan li{padding-left:22px;position:relative}
 .plan li::before{content:"";position:absolute;left:2px;top:.62em;width:8px;height:8px;border-radius:50%;background:var(--sea)}
+.links{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}
+.ext{display:inline-block;padding:8px 14px;border:1px solid var(--sea);border-radius:4px;text-decoration:none;font-weight:500;font-size:.95rem}
+.ext:hover{background:var(--sea);color:var(--bg)}
 .note{margin-top:32px;padding:20px 22px;border-left:3px solid var(--sand);background:var(--surface)}
 .note p{margin:8px 0 0;color:var(--muted)}
 .gallery{display:grid;gap:20px;min-width:0;align-content:start}
