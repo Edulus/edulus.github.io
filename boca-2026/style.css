@@ -122,6 +122,11 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .gtile a:hover img{opacity:.85}
 .gtile figcaption{font-size:.88rem;margin-top:8px;display:grid;gap:2px}
 .gtile figcaption span{font-size:.78rem;color:var(--muted)}
+.ig{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:20px}
+.route .ig{margin-top:10px}
+.iglabel{font-family:var(--f-mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-right:4px}
+.igtag{font-family:var(--f-mono);font-size:.82rem;padding:4px 10px;border-radius:999px;border:1px solid color-mix(in srgb,var(--bloom) 45%,transparent);color:var(--bloom);text-decoration:none}
+.igtag:hover{background:var(--bloom);color:var(--bg)}
 .foot{border-top:1px solid var(--line);padding-block:28px;color:var(--muted);font-size:.9rem}
 .foot p{margin:0 0 4px}.small{font-size:.82rem}
 
